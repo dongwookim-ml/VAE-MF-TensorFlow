@@ -167,7 +167,7 @@ class VAEMF(object):
         # add Saver ops
         self.saver = tf.train.Saver()
 
-    def train(self, M, n_steps=100000, train_prop=0.9):
+    def train(self, M, n_steps=100000, train_prop=0.9, result_path='result/'):
 
         nonzero_user_idx = M.nonzero()[0]
         nonzero_item_idx = M.nonzero()[1]
@@ -183,7 +183,7 @@ class VAEMF(object):
         trainM[nonzero_user_idx[train_size:],
                nonzero_item_idx[train_size:]] = 0
         summary_writer = tf.summary.FileWriter(
-            'experiment', graph=self.sess.graph)
+            result_path, graph=self.sess.graph)
 
         self.sess.run(tf.global_variables_initializer())
 
@@ -199,7 +199,7 @@ class VAEMF(object):
             summary_writer.add_summary(summary_str, step)
 
             if step % 50 == 0:
-                save_path = self.saver.save(self.sess, "save/model.ckpt")
+                save_path = self.saver.save(self.sess, result_path + "/model.ckpt")
 
                 if train_prop < 1:
                     user_idx = nonzero_user_idx[train_size:]

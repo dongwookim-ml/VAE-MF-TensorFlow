@@ -21,5 +21,5 @@ if __name__ == '__main__':
     user_input_dim = num_item
     item_input_dim = num_user
     with tf.Session() as sess:
-        model = VAEMF(sess, user_input_dim, item_input_dim)
+        model = VAEMF(sess, user_input_dim, item_input_dim, hidden_encoder_dim=500, hidden_decoder_dim=500)
         model.train(M)
