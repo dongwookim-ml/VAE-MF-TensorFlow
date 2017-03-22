@@ -171,7 +171,17 @@ class VAEMF(object):
 
         nonzero_user_idx = M.nonzero()[0]
         nonzero_item_idx = M.nonzero()[1]
+
+        #randomly shuffle indices
+        shf_idx = np.arange(len(nonzero_user_idx))
+        np.random.shuffle(shf_idx)
+        nonzero_user_idx = nonzero_user_idx[shf_idx]
+        nonzero_item_idx = nonzero_item_idx[shf_idx]
+
         train_size = int(nonzero_user_idx.size * train_prop)
+        trainM = M.copy()
+        trainM[nonzero_user_idx[train_size:],
+               nonzero_item_idx[train_size:]] = 0
         summary_writer = tf.summary.FileWriter(
             'experiment', graph=self.sess.graph)
 
@@ -182,7 +192,7 @@ class VAEMF(object):
             user_idx = nonzero_user_idx[batch_idx]
             item_idx = nonzero_item_idx[batch_idx]
 
-            feed_dict = {self.user: M[user_idx, :], self.item: M[:, item_idx].transpose(), self.rating: M[
+            feed_dict = {self.user: trainM[user_idx, :], self.item: trainM[:, item_idx].transpose(), self.rating: trainM[
                 user_idx, item_idx]}
             _, mse, mae, summary_str = self.sess.run(
                 [self.train_step, self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
@@ -201,3 +211,5 @@ class VAEMF(object):
                         [self.MSE, self.MAE, self.RMSQ], feed_dict=feed_dict)
                     print("Step {0} | Test MSE: {1}, MAE: {2}, RMSE: {3}".format(
                         step, mse, mae, rmse))
+                else:
+                    print("Step {0} | MSE: {1}, MAE: {2}".format(step, mse, mae))
