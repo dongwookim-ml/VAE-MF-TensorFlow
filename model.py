@@ -1,23 +1,24 @@
-from __future__ import division
-from __future__ import print_function
-import os.path
-import tensorflow as tf
+from __future__ import division, print_function
+
 import numpy as np
+import tensorflow as tf
 
 
-def weight_variable(shape):
+def weight_variable(shape, name):
     initial = tf.truncated_normal(shape, stddev=0.001)
-    return tf.Variable(initial)
+    return tf.Variable(initial, name=name)
 
 
-def bias_variable(shape):
-    initial = tf.constant(0., shape=shape)
-    return tf.Variable(initial)
+def bias_variable(shape, name):
+    b_init = tf.constant_initializer(0.)
+    return tf.get_variable(name, shape, initializer=b_init)
 
 
 class VAEMF(object):
 
-    def __init__(self, sess, user_input_dim, item_input_dim, hidden_encoder_dim=216, hidden_decoder_dim=216, latent_dim=24, output_dim=24, learning_rate=0.002, batch_size=64, reg_param=0):
+    def __init__(self, sess, user_input_dim, item_input_dim,
+                 hidden_encoder_dim=216, hidden_decoder_dim=216, latent_dim=24,
+                 output_dim=24, learning_rate=0.002, batch_size=64, reg_param=0):
         self.sess = sess
         self.user_input_dim = user_input_dim
         self.item_input_dim = item_input_dim
@@ -38,31 +39,33 @@ class VAEMF(object):
         self.rating = tf.placeholder("float", shape=[None])
 
         self.W_encoder_input_hidden_user = weight_variable(
-            [self.user_input_dim, self.hidden_encoder_dim])
+            [self.user_input_dim, self.hidden_encoder_dim], 'W_encoder_input_hidden_user')
         self.b_encoder_input_hidden_user = bias_variable(
-            [self.hidden_encoder_dim])
+            [self.hidden_encoder_dim], 'b_encoder_input_hidden_user')
         self.l2_loss += tf.nn.l2_loss(self.W_encoder_input_hidden_user)
 
         self.W_encoder_input_hidden_item = weight_variable(
-            [self.item_input_dim, self.hidden_encoder_dim])
+            [self.item_input_dim, self.hidden_encoder_dim], 'W_encoder_input_hidden_item')
         self.b_encoder_input_hidden_item = bias_variable(
-            [self.hidden_encoder_dim])
+            [self.hidden_encoder_dim], 'b_encoder_input_hidden_item')
         self.l2_loss += tf.nn.l2_loss(self.W_encoder_input_hidden_item)
 
         # Hidden layer encoder
-        self.hidden_encoder_user = tf.nn.relu(
-            tf.matmul(self.user, self.W_encoder_input_hidden_user) + self.b_encoder_input_hidden_user)
-        self.hidden_encoder_item = tf.nn.relu(
-            tf.matmul(self.item, self.W_encoder_input_hidden_item) + self.b_encoder_input_hidden_item)
+        self.hidden_encoder_user = tf.nn.relu(tf.matmul(
+            self.user, self.W_encoder_input_hidden_user) + self.b_encoder_input_hidden_user)
+        self.hidden_encoder_item = tf.nn.relu(tf.matmul(
+            self.item, self.W_encoder_input_hidden_item) + self.b_encoder_input_hidden_item)
 
         self.W_encoder_hidden_mu_user = weight_variable(
-            [self.hidden_encoder_dim, self.latent_dim])
-        self.b_encoder_hidden_mu_user = bias_variable([self.latent_dim])
+            [self.hidden_encoder_dim, self.latent_dim], 'W_encoder_hidden_mu_user')
+        self.b_encoder_hidden_mu_user = bias_variable(
+            [self.latent_dim], 'b_encoder_hidden_mu_user')
         self.l2_loss += tf.nn.l2_loss(self.W_encoder_hidden_mu_user)
 
         self.W_encoder_hidden_mu_item = weight_variable(
-            [self.hidden_encoder_dim, self.latent_dim])
-        self.b_encoder_hidden_mu_item = bias_variable([self.latent_dim])
+            [self.hidden_encoder_dim, self.latent_dim], 'W_encoder_hidden_mu_item')
+        self.b_encoder_hidden_mu_item = bias_variable(
+            [self.latent_dim], 'b_encoder_hidden_mu_item')
         self.l2_loss += tf.nn.l2_loss(self.W_encoder_hidden_mu_item)
 
         # Mu encoder
@@ -72,13 +75,15 @@ class VAEMF(object):
             self.hidden_encoder_item, self.W_encoder_hidden_mu_item) + self.b_encoder_hidden_mu_item
 
         self.W_encoder_hidden_logvar_user = weight_variable(
-            [self.hidden_encoder_dim, self.latent_dim])
-        self.b_encoder_hidden_logvar_user = bias_variable([self.latent_dim])
+            [self.hidden_encoder_dim, self.latent_dim], 'W_encoder_hidden_logvar_user')
+        self.b_encoder_hidden_logvar_user = bias_variable(
+            [self.latent_dim], 'b_encoder_hidden_logvar_user')
         self.l2_loss += tf.nn.l2_loss(self.W_encoder_hidden_logvar_user)
 
         self.W_encoder_hidden_logvar_item = weight_variable(
-            [self.hidden_encoder_dim, self.latent_dim])
-        self.b_encoder_hidden_logvar_item = bias_variable([self.latent_dim])
+            [self.hidden_encoder_dim, self.latent_dim], 'W_encoder_hidden_logvar_item')
+        self.b_encoder_hidden_logvar_item = bias_variable(
+            [self.latent_dim], 'b_encoder_hidden_logvar_item')
         self.l2_loss += tf.nn.l2_loss(self.W_encoder_hidden_logvar_item)
 
         # Sigma encoder
@@ -104,32 +109,34 @@ class VAEMF(object):
 
         # decoding network
         self.W_decoder_z_hidden_user = weight_variable(
-            [self.latent_dim, self.hidden_decoder_dim])
-        self.b_decoder_z_hidden_user = bias_variable([self.hidden_decoder_dim])
+            [self.latent_dim, self.hidden_decoder_dim], 'W_decoder_z_hidden_user')
+        self.b_decoder_z_hidden_user = bias_variable(
+            [self.hidden_decoder_dim], 'b_decoder_z_hidden_user')
         self.l2_loss += tf.nn.l2_loss(self.W_decoder_z_hidden_user)
 
         self.W_decoder_z_hidden_item = weight_variable(
-            [self.latent_dim, self.hidden_decoder_dim])
-        self.b_decoder_z_hidden_item = bias_variable([self.hidden_decoder_dim])
+            [self.latent_dim, self.hidden_decoder_dim], 'W_decoder_z_hidden_item')
+        self.b_decoder_z_hidden_item = bias_variable(
+            [self.hidden_decoder_dim], 'b_decoder_z_hidden_item')
         self.l2_loss += tf.nn.l2_loss(self.W_decoder_z_hidden_item)
 
         # Hidden layer decoder
-        self.hidden_decoder_user = tf.nn.relu(
-            tf.matmul(self.z_user, self.W_decoder_z_hidden_user) + self.b_decoder_z_hidden_user)
-        self.hidden_decoder_item = tf.nn.relu(
-            tf.matmul(self.z_item, self.W_decoder_z_hidden_item) + self.b_decoder_z_hidden_item)
+        self.hidden_decoder_user = tf.nn.relu(tf.matmul(
+            self.z_user, self.W_decoder_z_hidden_user) + self.b_decoder_z_hidden_user)
+        self.hidden_decoder_item = tf.nn.relu(tf.matmul(
+            self.z_item, self.W_decoder_z_hidden_item) + self.b_decoder_z_hidden_item)
 
         self.W_decoder_hidden_reconstruction_user = weight_variable(
-            [self.hidden_decoder_dim, self.output_dim])
+            [self.hidden_decoder_dim, self.output_dim], 'W_decoder_hidden_reconstruction_user')
         self.b_decoder_hidden_reconstruction_user = bias_variable(
-            [self.output_dim])
+            [self.output_dim], 'b_decoder_hidden_reconstruction_user')
         self.l2_loss += tf.nn.l2_loss(
             self.W_decoder_hidden_reconstruction_user)
 
         self.W_decoder_hidden_reconstruction_item = weight_variable(
-            [self.hidden_decoder_dim, self.output_dim])
+            [self.hidden_decoder_dim, self.output_dim], 'W_decoder_hidden_reconstruction_item')
         self.b_decoder_hidden_reconstruction_item = bias_variable(
-            [self.output_dim])
+            [self.output_dim], 'b_decoder_hidden_reconstruction_item')
         self.l2_loss += tf.nn.l2_loss(
             self.W_decoder_hidden_reconstruction_item)
 
@@ -151,8 +158,6 @@ class VAEMF(object):
             tf.square(tf.subtract(self.rating, self.rating_hat)))
         self.MAE = tf.reduce_mean(
             tf.abs(tf.subtract(self.rating, self.rating_hat)))
-        self.RMSQ = tf.sqrt(tf.reduce_mean(
-            tf.square(tf.subtract(self.rating, self.rating_hat))))
 
         self.loss = tf.reduce_mean(self.KLD + self.MSE)
         self.regularized_loss = self.loss + self.reg_param * self.l2_loss
@@ -167,21 +172,18 @@ class VAEMF(object):
         # add Saver ops
         self.saver = tf.train.Saver()
 
-    def train(self, M, n_steps=100000, train_prop=0.9, result_path='result/'):
-
+    def train(self, M, train_idx=None, test_idx=None, n_steps=100000, result_path='result/'):
         nonzero_user_idx = M.nonzero()[0]
         nonzero_item_idx = M.nonzero()[1]
 
-        #randomly shuffle indices
-        shf_idx = np.arange(len(nonzero_user_idx))
-        np.random.shuffle(shf_idx)
-        nonzero_user_idx = nonzero_user_idx[shf_idx]
-        nonzero_item_idx = nonzero_item_idx[shf_idx]
+        if train_idx is None:
+            train_idx = np.arange(nonzero_user_idx.size)
+        train_size = train_idx.size
+        # construct training set
+        trainM = np.zeros(M.shape)
+        trainM[nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]] = M[
+            nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]]
 
-        train_size = int(nonzero_user_idx.size * train_prop)
-        trainM = M.copy()
-        trainM[nonzero_user_idx[train_size:],
-               nonzero_item_idx[train_size:]] = 0
         summary_writer = tf.summary.FileWriter(
             result_path, graph=self.sess.graph)
 
@@ -189,27 +191,31 @@ class VAEMF(object):
 
         for step in range(1, n_steps):
             batch_idx = np.random.randint(train_size, size=self.batch_size)
-            user_idx = nonzero_user_idx[batch_idx]
-            item_idx = nonzero_item_idx[batch_idx]
+            user_idx = nonzero_user_idx[train_idx[batch_idx]]
+            item_idx = nonzero_item_idx[train_idx[batch_idx]]
 
-            feed_dict = {self.user: trainM[user_idx, :], self.item: trainM[:, item_idx].transpose(), self.rating: trainM[
-                user_idx, item_idx]}
+            feed_dict = {self.user: trainM[user_idx, :], self.item: trainM[
+                :, item_idx].transpose(), self.rating: trainM[user_idx, item_idx]}
             _, mse, mae, summary_str = self.sess.run(
                 [self.train_step, self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
             summary_writer.add_summary(summary_str, step)
 
-            if step % 50 == 0:
-                save_path = self.saver.save(self.sess, result_path + "/model.ckpt")
+            if step % int(n_steps / 10) == 0:
 
-                if train_prop < 1:
-                    user_idx = nonzero_user_idx[train_size:]
-                    item_idx = nonzero_item_idx[train_size:]
+                if test_idx is not None:
+                    user_idx = nonzero_user_idx[test_idx]
+                    item_idx = nonzero_item_idx[test_idx]
 
-                    feed_dict = {self.user: M[user_idx, :], self.item: M[:, item_idx].transpose(), self.rating: M[
-                        user_idx, item_idx]}
-                    mse, mae, rmse = self.sess.run(
-                        [self.MSE, self.MAE, self.RMSQ], feed_dict=feed_dict)
-                    print("Step {0} | Test MSE: {1}, MAE: {2}, RMSE: {3}".format(
-                        step, mse, mae, rmse))
+                    feed_dict = {self.user: M[user_idx, :], self.item: M[
+                        :, item_idx].transpose(), self.rating: M[user_idx, item_idx]}
+                    mse_test, mae_test = self.sess.run(
+                        [self.MSE, self.MAE], feed_dict=feed_dict)
+                    print("Step {0} | Train MSE: {1:3.4f}, MAE: {2:3.4f}".format(
+                        step, mse, mae))
+                    print("         | Test  MSE: {0:3.4f}, MAE: {1:3.4f}".format(
+                        mse_test, mae_test))
                 else:
-                    print("Step {0} | MSE: {1}, MAE: {2}".format(step, mse, mae))
+                    print("Step {0} | Train MSE: {1:3.4f}, MAE: {2:3.4f}".format(
+                        step, mse, mae))
+
+        self.saver.save(self.sess, result_path + "/model.ckpt")
