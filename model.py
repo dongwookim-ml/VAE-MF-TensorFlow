@@ -19,6 +19,10 @@ class VAEMF(object):
     def __init__(self, sess, user_input_dim, item_input_dim,
                  hidden_encoder_dim=216, hidden_decoder_dim=216, latent_dim=24,
                  output_dim=24, learning_rate=0.002, batch_size=64, reg_param=0):
+
+        if reg_param < 0 or reg_param > 1:
+            raise ValueError("regularization parameter must be in [0,1]")
+
         self.sess = sess
         self.user_input_dim = user_input_dim
         self.item_input_dim = item_input_dim
@@ -162,7 +166,11 @@ class VAEMF(object):
         self.loss = tf.reduce_mean(self.KLD + self.MSE)
         self.regularized_loss = self.loss + self.reg_param * self.l2_loss
 
-        self.loss_sum = tf.summary.scalar("mean_squred_error", self.MSE)
+        tf.summary.scalar("MSE", self.MSE)
+        tf.summary.scalar("MAE", self.MAE)
+        tf.summary.scalar("Loss", self.loss)
+        tf.summary.scalar("Reg-Loss", self.regularized_loss)
+
         self.train_step = tf.train.AdamOptimizer(
             self.learning_rate).minimize(self.regularized_loss)
 
@@ -171,6 +179,75 @@ class VAEMF(object):
 
         # add Saver ops
         self.saver = tf.train.Saver()
+
+    def train_test_validation(self, M, train_idx, test_idx, valid_idx, n_steps=100000, result_path='result/'):
+        nonzero_user_idx = M.nonzero()[0]
+        nonzero_item_idx = M.nonzero()[1]
+
+        train_size = train_idx.size
+        trainM = np.zeros(M.shape)
+        trainM[nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]] = M[
+            nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]]
+
+        train_writer = tf.summary.FileWriter(
+            result_path+'/train', graph=self.sess.graph)
+        valid_writer = tf.summary.FileWriter(result_path+'/validation', graph=self.sess.graph)
+        test_writer = tf.summary.FileWriter(result_path+'/test', graph=self.sess.graph)
+
+        best_val_mse = 100
+        best_val_mae = 100
+        best_test_mse = 0
+        best_test_mae = 0
+
+        self.sess.run(tf.global_variables_initializer())
+
+        for step in range(1, n_steps):
+            batch_idx = np.random.randint(train_size, size=self.batch_size)
+            user_idx = nonzero_user_idx[train_idx[batch_idx]]
+            item_idx = nonzero_item_idx[train_idx[batch_idx]]
+
+            feed_dict = {self.user: trainM[user_idx, :], self.item: trainM[
+                :, item_idx].transpose(), self.rating: trainM[user_idx, item_idx]}
+            _, mse, mae, summary_str = self.sess.run(
+                [self.train_step, self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
+            train_writer.add_summary(summary_str, step)
+
+            if step % int(n_steps / 10) == 0:
+                valid_user_idx = nonzero_user_idx[valid_idx]
+                valid_item_idx = nonzero_item_idx[valid_idx]
+                feed_dict = {self.user: M[valid_user_idx, :], self.item: M[
+                    :, valid_item_idx].transpose(), self.rating: M[valid_user_idx, valid_item_idx]}
+                mse_valid, mae_valid, summary_str = self.sess.run(
+                    [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
+
+                valid_writer.add_summary(summary_str, step)
+
+                test_user_idx = nonzero_user_idx[test_idx]
+                test_item_idx = nonzero_item_idx[test_idx]
+                feed_dict = {self.user: M[test_user_idx, :], self.item: M[
+                    :, test_item_idx].transpose(), self.rating: M[test_user_idx, test_item_idx]}
+                mse_test, mae_test, summary_str = self.sess.run(
+                    [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
+
+                test_writer.add_summary(summary_str, step)
+
+                print("Step {0} | Train MSE: {1:3.4f}, MAE: {2:3.4f}".format(
+                    step, mse, mae))
+                print("         | Valid  MSE: {0:3.4f}, MAE: {1:3.4f}".format(
+                    mse_valid, mae_valid))
+                print("         | Test  MSE: {0:3.4f}, MAE: {1:3.4f}".format(
+                    mse_test, mae_test))
+
+                if best_val_mse > mse_valid:
+                    best_val_mse = mse_valid
+                    best_test_mse = mse_test
+
+                if best_val_mae > mae_valid:
+                    best_val_mae = mae_valid
+                    best_test_mae = mae_test
+
+        self.saver.save(self.sess, result_path + "/model.ckpt")
+        return best_test_mse, best_test_mae
 
     def train(self, M, train_idx=None, test_idx=None, n_steps=100000, result_path='result/'):
         nonzero_user_idx = M.nonzero()[0]
@@ -184,8 +261,10 @@ class VAEMF(object):
         trainM[nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]] = M[
             nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]]
 
-        summary_writer = tf.summary.FileWriter(
-            result_path, graph=self.sess.graph)
+        train_writer = tf.summary.FileWriter(
+            result_path+'/train', graph=self.sess.graph)
+        test_writer = tf.summary.FileWriter(
+            result_path+'/test', graph=self.sess.graph)
 
         self.sess.run(tf.global_variables_initializer())
 
@@ -198,9 +277,9 @@ class VAEMF(object):
                 :, item_idx].transpose(), self.rating: trainM[user_idx, item_idx]}
             _, mse, mae, summary_str = self.sess.run(
                 [self.train_step, self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
-            summary_writer.add_summary(summary_str, step)
+            train_writer.add_summary(summary_str, step)
 
-            if step % int(n_steps / 10) == 0:
+            if step % int(n_steps / 100) == 0:
 
                 if test_idx is not None:
                     user_idx = nonzero_user_idx[test_idx]
@@ -208,12 +287,14 @@ class VAEMF(object):
 
                     feed_dict = {self.user: M[user_idx, :], self.item: M[
                         :, item_idx].transpose(), self.rating: M[user_idx, item_idx]}
-                    mse_test, mae_test = self.sess.run(
-                        [self.MSE, self.MAE], feed_dict=feed_dict)
+                    mse_test, mae_test, summary_str = self.sess.run(
+                        [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
                     print("Step {0} | Train MSE: {1:3.4f}, MAE: {2:3.4f}".format(
                         step, mse, mae))
                     print("         | Test  MSE: {0:3.4f}, MAE: {1:3.4f}".format(
                         mse_test, mae_test))
+
+                    test_writer.add_summary(summary_str, step)
                 else:
                     print("Step {0} | Train MSE: {1:3.4f}, MAE: {2:3.4f}".format(
                         step, mse, mae))
