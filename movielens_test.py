@@ -16,8 +16,8 @@ learning_rate = 0.002
 batch_size = 64
 reg_param = 0
 
-one_hot = True
-n_steps = 100000
+one_hot = False
+n_steps = 1000
 
 hedims = [64, 128, 256, 512]
 hddims = [64, 128, 256, 512]

@@ -213,6 +213,15 @@ class VAEMF(object):
         # add Saver ops
         self.saver = tf.train.Saver()
 
+    def construct_feeddict(self, user_idx, item_idx, M):
+        if self.one_hot:
+            feed_dict = {self.user: tf.one_hot(user_idx, self.user_input_dim).eval(), self.item: tf.one_hot(
+                item_idx, self.item_input_dim).eval(), self.rating: M[user_idx, item_idx]}
+        else:
+            feed_dict = {self.user: M[user_idx, :], self.item: M[
+                :, item_idx].transpose(), self.rating: M[user_idx, item_idx]}
+        return feed_dict
+
     def train_test_validation(self, M, train_idx, test_idx, valid_idx, n_steps=100000, result_path='result/'):
         nonzero_user_idx = M.nonzero()[0]
         nonzero_item_idx = M.nonzero()[1]
@@ -240,13 +249,7 @@ class VAEMF(object):
             batch_idx = np.random.randint(train_size, size=self.batch_size)
             user_idx = nonzero_user_idx[train_idx[batch_idx]]
             item_idx = nonzero_item_idx[train_idx[batch_idx]]
-
-            if self.one_hot:
-                feed_dict = {self.user: tf.one_hot(user_idx, self.user_input_dim).eval(), self.item: tf.one_hot(
-                    item_idx, self.item_input_dim).eval(), self.rating: trainM[user_idx, item_idx]}
-            else:
-                feed_dict = {self.user: trainM[user_idx, :], self.item: trainM[
-                    :, item_idx].transpose(), self.rating: trainM[user_idx, item_idx]}
+            feed_dict = self.construct_feeddict(user_idx, item_idx, trainM)
 
             _, mse, mae, summary_str = self.sess.run(
                 [self.train_step, self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
@@ -255,12 +258,7 @@ class VAEMF(object):
             if step % int(n_steps / 10) == 0:
                 valid_user_idx = nonzero_user_idx[valid_idx]
                 valid_item_idx = nonzero_item_idx[valid_idx]
-                if self.one_hot:
-                    feed_dict = {self.user: tf.one_hot(valid_user_idx, self.user_input_dim).eval(), self.item: tf.one_hot(
-                        valid_item_idx, self.item_input_dim).eval(), self.rating: trainM[valid_user_idx, valid_item_idx]}
-                else:
-                    feed_dict = {self.user: M[valid_user_idx, :], self.item: M[
-                        :, valid_item_idx].transpose(), self.rating: M[valid_user_idx, valid_item_idx]}
+                feed_dict = self.construct_feeddict(valid_user_idx, valid_item_idx, M)
                 mse_valid, mae_valid, summary_str = self.sess.run(
                     [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
 
@@ -268,12 +266,7 @@ class VAEMF(object):
 
                 test_user_idx = nonzero_user_idx[test_idx]
                 test_item_idx = nonzero_item_idx[test_idx]
-                if self.one_hot:
-                    feed_dict = {self.user: tf.one_hot(test_user_idx, self.user_input_dim).eval(), self.item: tf.one_hot(
-                        test_item_idx, self.item_input_dim).eval(), self.rating: trainM[test_user_idx, test_item_idx]}
-                else:
-                    feed_dict = {self.user: M[test_user_idx, :], self.item: M[
-                        :, test_item_idx].transpose(), self.rating: M[test_user_idx, test_item_idx]}
+                feed_dict = self.construct_feeddict(test_user_idx, test_item_idx, M)
                 mse_test, mae_test, summary_str = self.sess.run(
                     [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
 
@@ -320,13 +313,8 @@ class VAEMF(object):
             batch_idx = np.random.randint(train_size, size=self.batch_size)
             user_idx = nonzero_user_idx[train_idx[batch_idx]]
             item_idx = nonzero_item_idx[train_idx[batch_idx]]
+            feed_dict = self.construct_feeddict(user_idx, item_idx, trainM)
 
-            if self.one_hot:
-                feed_dict = {self.user: tf.one_hot(user_idx, self.user_input_dim).eval(), self.item: tf.one_hot(
-                    item_idx, self.item_input_dim).eval(), self.rating: trainM[user_idx, item_idx]}
-            else:
-                feed_dict = {self.user: trainM[user_idx, :], self.item: trainM[
-                    :, item_idx].transpose(), self.rating: trainM[user_idx, item_idx]}
             _, mse, mae, summary_str = self.sess.run(
                 [self.train_step, self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
             train_writer.add_summary(summary_str, step)
@@ -336,13 +324,8 @@ class VAEMF(object):
                 if test_idx is not None:
                     user_idx = nonzero_user_idx[test_idx]
                     item_idx = nonzero_item_idx[test_idx]
+                    feed_dict = self.construct_feeddict(user_idx, item_idx, M)
 
-                    if self.one_hot:
-                        feed_dict = {self.user: tf.one_hot(user_idx, self.user_input_dim).eval(), self.item: tf.one_hot(
-                            item_idx, self.item_input_dim).eval(), self.rating: trainM[user_idx, item_idx]}
-                    else:
-                        feed_dict = {self.user: M[user_idx, :], self.item: M[
-                            :, item_idx].transpose(), self.rating: M[user_idx, item_idx]}
                     mse_test, mae_test, summary_str = self.sess.run(
                         [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
                     print("Step {0} | Train MSE: {1:3.4f}, MAE: {2:3.4f}".format(
