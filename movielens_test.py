@@ -16,7 +16,6 @@ learning_rate = 0.002
 batch_size = 64
 reg_param = 0
 
-one_hot = True
 n_steps = 10000
 
 hedims = [128, 256, 512]
@@ -26,6 +25,7 @@ odims = [16, 32, 64, 128]
 lrates = [0.001, 0.002, 0.01, 0.02]
 bsizes = [128, 256, 512, 1024, 2048]
 regs = [0.001, 0.002, 0.01, 0.1, 0.5, 1]
+one_hots = [True, False]
 
 def read_dataset():
     M = np.zeros([num_user, num_item])
@@ -70,8 +70,8 @@ def train_test_validation():
     valid_idx = idx[int(0.8 * num_rating):int(0.9 * num_rating)]
     test_idx = idx[int(0.9 * num_rating):]
 
-    for hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param in itertools.product(hedims, hddims, ldims, odims, lrates, bsizes, regs):
-        result_path = "{0}_{1}_{2}_{3}_{4}_{5}_{6}".format(hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param)
+    for hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param, one_hot in itertools.product(hedims, hddims, ldims, odims, lrates, bsizes, regs, one_hots):
+        result_path = "{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}".format(hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param, one_hot)
         if not os.path.exists(result_path+"/model.ckpt.index"):
             with tf.Session() as sess:
                 model = VAEMF(sess, num_user, num_item,
@@ -85,7 +85,7 @@ def train_test_validation():
                 print("Best MSE = {0}, best MAE = {1}".format(best_mse, best_mae))
 
                 with open('result.csv', 'a') as f:
-                    f.write("{0},{1},{2},{3},{4},{5},{6},{7},{8}\n".format(hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param, best_mse, best_mae))
+                    f.write("{0},{1},{2},{3},{4},{5},{6},{7},{8},{9}\n".format(hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param, one_hot, best_mse, best_mae))
 
         tf.reset_default_graph()
 
