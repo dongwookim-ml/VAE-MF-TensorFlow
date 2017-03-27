@@ -38,11 +38,11 @@ class VAEMF(object):
         self.user_embed_dim = user_embed_dim
         self.item_embed_dim = item_embed_dim
         if self.one_hot:
-            self.user_input_dim = self.num_item
-            self.item_input_dim = self.num_user
-        else:
             self.user_input_dim = self.num_user
             self.item_input_dim = self.num_item
+        else:
+            self.user_input_dim = self.num_item
+            self.item_input_dim = self.num_user
         self.build_model()
 
     def build_model(self):
@@ -238,8 +238,8 @@ class VAEMF(object):
         test_writer = tf.summary.FileWriter(
             result_path + '/test', graph=self.sess.graph)
 
-        best_val_mse = 100
-        best_val_mae = 100
+        best_val_mse = np.inf
+        best_val_mae = np.inf
         best_test_mse = 0
         best_test_mae = 0
 

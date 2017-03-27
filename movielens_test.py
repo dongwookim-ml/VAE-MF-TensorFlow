@@ -16,7 +16,7 @@ learning_rate = 0.002
 batch_size = 64
 reg_param = 0
 
-one_hot = True
+one_hot = False
 n_steps = 10000
 
 hedims = [128, 256, 512]
@@ -49,7 +49,7 @@ def cross_validation():
     with tf.Session() as sess:
         model = VAEMF(sess, num_user, num_item,
                       hidden_encoder_dim=hidden_encoder_dim, hidden_decoder_dim=hidden_decoder_dim,
-                      latent_dim=latent_dim, output_dim=output_dim, learning_rate=learning_rate, batch_size=batch_size, reg_param=reg_param)
+                      latent_dim=latent_dim, output_dim=output_dim, learning_rate=learning_rate, batch_size=batch_size, reg_param=reg_param, one_hot=one_hot)
 
         for i, (train_idx, test_idx) in enumerate(kf.split(rating_idx)):
             print("{0}/{1} Fold start| Train size={2}, Test size={3}".format(i,
@@ -76,7 +76,7 @@ def train_test_validation():
             with tf.Session() as sess:
                 model = VAEMF(sess, num_user, num_item,
                               hidden_encoder_dim=hidden_encoder_dim, hidden_decoder_dim=hidden_decoder_dim,
-                              latent_dim=latent_dim, output_dim=output_dim, learning_rate=learning_rate, batch_size=batch_size, reg_param=reg_param, one_hot=True)
+                              latent_dim=latent_dim, output_dim=output_dim, learning_rate=learning_rate, batch_size=batch_size, reg_param=reg_param, one_hot=one_hot)
                 print("Train size={0}, Validation size={1}, Test size={2}".format(
                     train_idx.size, valid_idx.size, test_idx.size))
                 best_mse, best_mae = model.train_test_validation(
