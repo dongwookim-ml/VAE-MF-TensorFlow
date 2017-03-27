@@ -66,6 +66,9 @@ class VAEMF(object):
                 [self.item_embed_dim, self.hidden_encoder_dim], 'W_encoder_input_hidden_item')
             self.b_encoder_input_hidden_item = bias_variable(
                 [self.hidden_encoder_dim], 'b_encoder_input_hidden_item')
+
+            self.l2_loss += tf.nn.l2_loss(self.W_user_embed)
+            self.l2_loss += tf.nn.l2_loss(self.W_item_embed)
         else:
             self.W_encoder_input_hidden_user = weight_variable(
                 [self.user_input_dim, self.hidden_encoder_dim], 'W_encoder_input_hidden_user')
@@ -76,7 +79,6 @@ class VAEMF(object):
             self.b_encoder_input_hidden_item = bias_variable(
                 [self.hidden_encoder_dim], 'b_encoder_input_hidden_item')
         self.l2_loss += tf.nn.l2_loss(self.W_encoder_input_hidden_user)
-
         self.l2_loss += tf.nn.l2_loss(self.W_encoder_input_hidden_item)
 
         # Hidden layer encoder
@@ -215,8 +217,8 @@ class VAEMF(object):
 
     def construct_feeddict(self, user_idx, item_idx, M):
         if self.one_hot:
-            feed_dict = {self.user: tf.one_hot(user_idx, self.user_input_dim).eval(), self.item: tf.one_hot(
-                item_idx, self.item_input_dim).eval(), self.rating: M[user_idx, item_idx]}
+            feed_dict = {self.user: self.user_onehot[user_idx], self.item: self.item_onehot[item_idx],
+                self.rating: M[user_idx, item_idx]}
         else:
             feed_dict = {self.user: M[user_idx, :], self.item: M[
                 :, item_idx].transpose(), self.rating: M[user_idx, item_idx]}
@@ -244,6 +246,11 @@ class VAEMF(object):
         best_test_mae = 0
 
         self.sess.run(tf.global_variables_initializer())
+
+        # precompute one-hot vector for users and items
+        if self.one_hot:
+            self.user_onehot = tf.one_hot(np.arange(self.num_user), self.num_user).eval()
+            self.item_onehot = tf.one_hot(np.arange(self.num_item), self.num_item).eval()
 
         for step in range(1, n_steps):
             batch_idx = np.random.randint(train_size, size=self.batch_size)
@@ -308,6 +315,11 @@ class VAEMF(object):
             result_path + '/test', graph=self.sess.graph)
 
         self.sess.run(tf.global_variables_initializer())
+
+        # precompute one-hot vector for users and items
+        if self.one_hot:
+            self.user_onehot = tf.one_hot(np.arange(self.num_user), self.num_user).eval()
+            self.item_onehot = tf.one_hot(np.arange(self.num_item), self.num_item).eval()
 
         for step in range(1, n_steps):
             batch_idx = np.random.randint(train_size, size=self.batch_size)
