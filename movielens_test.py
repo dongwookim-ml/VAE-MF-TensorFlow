@@ -16,6 +16,9 @@ learning_rate = 0.002
 batch_size = 64
 reg_param = 0
 
+one_hot = True
+n_steps = 100000
+
 hedims = [64, 128, 256, 512]
 hddims = [64, 128, 256, 512]
 ldims = [8, 16, 32, 64, 128]
@@ -40,14 +43,11 @@ def cross_validation():
     M = read_dataset()
     n_fold = 10
 
-    user_input_dim = num_item
-    item_input_dim = num_user
-
     rating_idx = np.array(M.nonzero()).T
     kf = KFold(n_splits=n_fold, random_state=0)
 
     with tf.Session() as sess:
-        model = VAEMF(sess, user_input_dim, item_input_dim,
+        model = VAEMF(sess, num_user, num_item,
                       hidden_encoder_dim=hidden_encoder_dim, hidden_decoder_dim=hidden_decoder_dim,
                       latent_dim=latent_dim, output_dim=output_dim, learning_rate=learning_rate, batch_size=batch_size, reg_param=reg_param)
 
@@ -55,14 +55,11 @@ def cross_validation():
             print("{0}/{1} Fold start| Train size={2}, Test size={3}".format(i,
                                                                              n_fold, train_idx.size, test_idx.size))
             model.train(M, train_idx=train_idx,
-                        test_idx=test_idx, n_steps=100000)
+                        test_idx=test_idx, n_steps=n_steps)
 
 
 def train_test_validation():
     M = read_dataset()
-
-    user_input_dim = num_item
-    item_input_dim = num_user
 
     num_rating = np.count_nonzero(M)
     idx = np.arange(num_rating)
@@ -76,13 +73,13 @@ def train_test_validation():
     for hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param in itertools.product(hedims, hddims, ldims, odims, lrates, bsizes, regs):
         result_path = "{0}_{1}_{2}_{3}_{4}_{5}_{6}".format(hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param)
         with tf.Session() as sess:
-            model = VAEMF(sess, user_input_dim, item_input_dim,
+            model = VAEMF(sess, num_user, num_item,
                           hidden_encoder_dim=hidden_encoder_dim, hidden_decoder_dim=hidden_decoder_dim,
-                          latent_dim=latent_dim, output_dim=output_dim, learning_rate=learning_rate, batch_size=batch_size, reg_param=reg_param)
+                          latent_dim=latent_dim, output_dim=output_dim, learning_rate=learning_rate, batch_size=batch_size, reg_param=reg_param, one_hot=True)
             print("Train size={0}, Validation size={1}, Test size={2}".format(
                 train_idx.size, valid_idx.size, test_idx.size))
             best_mse, best_mae = model.train_test_validation(
-                M, train_idx=train_idx, test_idx=test_idx, valid_idx=valid_idx, n_steps=10000, result_path=result_path)
+                M, train_idx=train_idx, test_idx=test_idx, valid_idx=valid_idx, n_steps=n_steps, result_path=result_path)
 
             print("Best MSE = {0}, best MAE = {1}".format(best_mse, best_mae))
 

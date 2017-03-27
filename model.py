@@ -16,16 +16,17 @@ def bias_variable(shape, name):
 
 class VAEMF(object):
 
-    def __init__(self, sess, user_input_dim, item_input_dim,
+    def __init__(self, sess, num_user, num_item,
                  hidden_encoder_dim=216, hidden_decoder_dim=216, latent_dim=24,
-                 output_dim=24, learning_rate=0.002, batch_size=64, reg_param=0):
+                 output_dim=24, learning_rate=0.002, batch_size=64, reg_param=0,
+                 one_hot=False, user_embed_dim=216, item_embed_dim=216):
 
         if reg_param < 0 or reg_param > 1:
             raise ValueError("regularization parameter must be in [0,1]")
 
         self.sess = sess
-        self.user_input_dim = user_input_dim
-        self.item_input_dim = item_input_dim
+        self.num_user = num_user
+        self.num_item = num_item
         self.hidden_encoder_dim = hidden_encoder_dim
         self.hidden_decoder_dim = hidden_decoder_dim
         self.latent_dim = latent_dim
@@ -33,6 +34,15 @@ class VAEMF(object):
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.reg_param = reg_param
+        self.one_hot = one_hot
+        self.user_embed_dim = user_embed_dim
+        self.item_embed_dim = item_embed_dim
+        if self.one_hot:
+            self.user_input_dim = self.num_item
+            self.item_input_dim = self.num_user
+        else:
+            self.user_input_dim = self.num_user
+            self.item_input_dim = self.num_item
         self.build_model()
 
     def build_model(self):
@@ -42,23 +52,46 @@ class VAEMF(object):
         self.item = tf.placeholder("float", shape=[None, self.item_input_dim])
         self.rating = tf.placeholder("float", shape=[None])
 
-        self.W_encoder_input_hidden_user = weight_variable(
-            [self.user_input_dim, self.hidden_encoder_dim], 'W_encoder_input_hidden_user')
-        self.b_encoder_input_hidden_user = bias_variable(
-            [self.hidden_encoder_dim], 'b_encoder_input_hidden_user')
+        if self.one_hot:
+            self.W_user_embed = weight_variable(
+                [self.user_input_dim, self.user_embed_dim], 'user_embed')
+            self.W_item_embed = weight_variable(
+                [self.item_input_dim, self.item_embed_dim], 'item_embed')
+
+            self.W_encoder_input_hidden_user = weight_variable(
+                [self.user_embed_dim, self.hidden_encoder_dim], 'W_encoder_input_hidden_user')
+            self.b_encoder_input_hidden_user = bias_variable(
+                [self.hidden_encoder_dim], 'b_encoder_input_hidden_user')
+            self.W_encoder_input_hidden_item = weight_variable(
+                [self.item_embed_dim, self.hidden_encoder_dim], 'W_encoder_input_hidden_item')
+            self.b_encoder_input_hidden_item = bias_variable(
+                [self.hidden_encoder_dim], 'b_encoder_input_hidden_item')
+        else:
+            self.W_encoder_input_hidden_user = weight_variable(
+                [self.user_input_dim, self.hidden_encoder_dim], 'W_encoder_input_hidden_user')
+            self.b_encoder_input_hidden_user = bias_variable(
+                [self.hidden_encoder_dim], 'b_encoder_input_hidden_user')
+            self.W_encoder_input_hidden_item = weight_variable(
+                [self.item_input_dim, self.hidden_encoder_dim], 'W_encoder_input_hidden_item')
+            self.b_encoder_input_hidden_item = bias_variable(
+                [self.hidden_encoder_dim], 'b_encoder_input_hidden_item')
         self.l2_loss += tf.nn.l2_loss(self.W_encoder_input_hidden_user)
 
-        self.W_encoder_input_hidden_item = weight_variable(
-            [self.item_input_dim, self.hidden_encoder_dim], 'W_encoder_input_hidden_item')
-        self.b_encoder_input_hidden_item = bias_variable(
-            [self.hidden_encoder_dim], 'b_encoder_input_hidden_item')
         self.l2_loss += tf.nn.l2_loss(self.W_encoder_input_hidden_item)
 
         # Hidden layer encoder
-        self.hidden_encoder_user = tf.nn.relu(tf.matmul(
-            self.user, self.W_encoder_input_hidden_user) + self.b_encoder_input_hidden_user)
-        self.hidden_encoder_item = tf.nn.relu(tf.matmul(
-            self.item, self.W_encoder_input_hidden_item) + self.b_encoder_input_hidden_item)
+        if self.one_hot:
+            self.user_embed = tf.matmul(self.user, self.W_user_embed)
+            self.item_embed = tf.matmul(self.item, self.W_item_embed)
+            self.hidden_encoder_user = tf.nn.relu(tf.matmul(
+                self.user_embed, self.W_encoder_input_hidden_user) + self.b_encoder_input_hidden_user)
+            self.hidden_encoder_item = tf.nn.relu(tf.matmul(
+                self.item_embed, self.W_encoder_input_hidden_item) + self.b_encoder_input_hidden_item)
+        else:
+            self.hidden_encoder_user = tf.nn.relu(tf.matmul(
+                self.user, self.W_encoder_input_hidden_user) + self.b_encoder_input_hidden_user)
+            self.hidden_encoder_item = tf.nn.relu(tf.matmul(
+                self.item, self.W_encoder_input_hidden_item) + self.b_encoder_input_hidden_item)
 
         self.W_encoder_hidden_mu_user = weight_variable(
             [self.hidden_encoder_dim, self.latent_dim], 'W_encoder_hidden_mu_user')
@@ -190,9 +223,11 @@ class VAEMF(object):
             nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]]
 
         train_writer = tf.summary.FileWriter(
-            result_path+'/train', graph=self.sess.graph)
-        valid_writer = tf.summary.FileWriter(result_path+'/validation', graph=self.sess.graph)
-        test_writer = tf.summary.FileWriter(result_path+'/test', graph=self.sess.graph)
+            result_path + '/train', graph=self.sess.graph)
+        valid_writer = tf.summary.FileWriter(
+            result_path + '/validation', graph=self.sess.graph)
+        test_writer = tf.summary.FileWriter(
+            result_path + '/test', graph=self.sess.graph)
 
         best_val_mse = 100
         best_val_mae = 100
@@ -206,8 +241,13 @@ class VAEMF(object):
             user_idx = nonzero_user_idx[train_idx[batch_idx]]
             item_idx = nonzero_item_idx[train_idx[batch_idx]]
 
-            feed_dict = {self.user: trainM[user_idx, :], self.item: trainM[
-                :, item_idx].transpose(), self.rating: trainM[user_idx, item_idx]}
+            if self.one_hot:
+                feed_dict = {self.user: tf.one_hot(user_idx, self.user_input_dim).eval(), self.item: tf.one_hot(
+                    item_idx, self.item_input_dim).eval(), self.rating: trainM[user_idx, item_idx]}
+            else:
+                feed_dict = {self.user: trainM[user_idx, :], self.item: trainM[
+                    :, item_idx].transpose(), self.rating: trainM[user_idx, item_idx]}
+
             _, mse, mae, summary_str = self.sess.run(
                 [self.train_step, self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
             train_writer.add_summary(summary_str, step)
@@ -215,8 +255,12 @@ class VAEMF(object):
             if step % int(n_steps / 10) == 0:
                 valid_user_idx = nonzero_user_idx[valid_idx]
                 valid_item_idx = nonzero_item_idx[valid_idx]
-                feed_dict = {self.user: M[valid_user_idx, :], self.item: M[
-                    :, valid_item_idx].transpose(), self.rating: M[valid_user_idx, valid_item_idx]}
+                if self.one_hot:
+                    feed_dict = {self.user: tf.one_hot(valid_user_idx, self.user_input_dim).eval(), self.item: tf.one_hot(
+                        valid_item_idx, self.item_input_dim).eval(), self.rating: trainM[valid_user_idx, valid_item_idx]}
+                else:
+                    feed_dict = {self.user: M[valid_user_idx, :], self.item: M[
+                        :, valid_item_idx].transpose(), self.rating: M[valid_user_idx, valid_item_idx]}
                 mse_valid, mae_valid, summary_str = self.sess.run(
                     [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
 
@@ -224,8 +268,12 @@ class VAEMF(object):
 
                 test_user_idx = nonzero_user_idx[test_idx]
                 test_item_idx = nonzero_item_idx[test_idx]
-                feed_dict = {self.user: M[test_user_idx, :], self.item: M[
-                    :, test_item_idx].transpose(), self.rating: M[test_user_idx, test_item_idx]}
+                if self.one_hot:
+                    feed_dict = {self.user: tf.one_hot(test_user_idx, self.user_input_dim).eval(), self.item: tf.one_hot(
+                        test_item_idx, self.item_input_dim).eval(), self.rating: trainM[test_user_idx, test_item_idx]}
+                else:
+                    feed_dict = {self.user: M[test_user_idx, :], self.item: M[
+                        :, test_item_idx].transpose(), self.rating: M[test_user_idx, test_item_idx]}
                 mse_test, mae_test, summary_str = self.sess.run(
                     [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
 
@@ -262,9 +310,9 @@ class VAEMF(object):
             nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]]
 
         train_writer = tf.summary.FileWriter(
-            result_path+'/train', graph=self.sess.graph)
+            result_path + '/train', graph=self.sess.graph)
         test_writer = tf.summary.FileWriter(
-            result_path+'/test', graph=self.sess.graph)
+            result_path + '/test', graph=self.sess.graph)
 
         self.sess.run(tf.global_variables_initializer())
 
@@ -273,8 +321,12 @@ class VAEMF(object):
             user_idx = nonzero_user_idx[train_idx[batch_idx]]
             item_idx = nonzero_item_idx[train_idx[batch_idx]]
 
-            feed_dict = {self.user: trainM[user_idx, :], self.item: trainM[
-                :, item_idx].transpose(), self.rating: trainM[user_idx, item_idx]}
+            if self.one_hot:
+                feed_dict = {self.user: tf.one_hot(user_idx, self.user_input_dim).eval(), self.item: tf.one_hot(
+                    item_idx, self.item_input_dim).eval(), self.rating: trainM[user_idx, item_idx]}
+            else:
+                feed_dict = {self.user: trainM[user_idx, :], self.item: trainM[
+                    :, item_idx].transpose(), self.rating: trainM[user_idx, item_idx]}
             _, mse, mae, summary_str = self.sess.run(
                 [self.train_step, self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
             train_writer.add_summary(summary_str, step)
@@ -285,8 +337,12 @@ class VAEMF(object):
                     user_idx = nonzero_user_idx[test_idx]
                     item_idx = nonzero_item_idx[test_idx]
 
-                    feed_dict = {self.user: M[user_idx, :], self.item: M[
-                        :, item_idx].transpose(), self.rating: M[user_idx, item_idx]}
+                    if self.one_hot:
+                        feed_dict = {self.user: tf.one_hot(user_idx, self.user_input_dim).eval(), self.item: tf.one_hot(
+                            item_idx, self.item_input_dim).eval(), self.rating: trainM[user_idx, item_idx]}
+                    else:
+                        feed_dict = {self.user: M[user_idx, :], self.item: M[
+                            :, item_idx].transpose(), self.rating: M[user_idx, item_idx]}
                     mse_test, mae_test, summary_str = self.sess.run(
                         [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
                     print("Step {0} | Train MSE: {1:3.4f}, MAE: {2:3.4f}".format(
