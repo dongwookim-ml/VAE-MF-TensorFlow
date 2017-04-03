@@ -218,7 +218,7 @@ class VAEMF(object):
     def construct_feeddict(self, user_idx, item_idx, M):
         if self.one_hot:
             feed_dict = {self.user: self.user_onehot[user_idx], self.item: self.item_onehot[item_idx],
-                self.rating: M[user_idx, item_idx]}
+                         self.rating: M[user_idx, item_idx]}
         else:
             feed_dict = {self.user: M[user_idx, :], self.item: M[
                 :, item_idx].transpose(), self.rating: M[user_idx, item_idx]}
@@ -249,8 +249,10 @@ class VAEMF(object):
 
         # precompute one-hot vector for users and items
         if self.one_hot:
-            self.user_onehot = tf.one_hot(np.arange(self.num_user), self.num_user).eval()
-            self.item_onehot = tf.one_hot(np.arange(self.num_item), self.num_item).eval()
+            self.user_onehot = tf.one_hot(
+                np.arange(self.num_user), self.num_user).eval()
+            self.item_onehot = tf.one_hot(
+                np.arange(self.num_item), self.num_item).eval()
 
         for step in range(1, n_steps):
             batch_idx = np.random.randint(train_size, size=self.batch_size)
@@ -265,7 +267,8 @@ class VAEMF(object):
             if step % int(n_steps / 10) == 0:
                 valid_user_idx = nonzero_user_idx[valid_idx]
                 valid_item_idx = nonzero_item_idx[valid_idx]
-                feed_dict = self.construct_feeddict(valid_user_idx, valid_item_idx, M)
+                feed_dict = self.construct_feeddict(
+                    valid_user_idx, valid_item_idx, M)
                 mse_valid, mae_valid, summary_str = self.sess.run(
                     [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
 
@@ -273,7 +276,8 @@ class VAEMF(object):
 
                 test_user_idx = nonzero_user_idx[test_idx]
                 test_item_idx = nonzero_item_idx[test_idx]
-                feed_dict = self.construct_feeddict(test_user_idx, test_item_idx, M)
+                feed_dict = self.construct_feeddict(
+                    test_user_idx, test_item_idx, M)
                 mse_test, mae_test, summary_str = self.sess.run(
                     [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
 
@@ -318,8 +322,10 @@ class VAEMF(object):
 
         # precompute one-hot vector for users and items
         if self.one_hot:
-            self.user_onehot = tf.one_hot(np.arange(self.num_user), self.num_user).eval()
-            self.item_onehot = tf.one_hot(np.arange(self.num_item), self.num_item).eval()
+            self.user_onehot = tf.one_hot(
+                np.arange(self.num_user), self.num_user).eval()
+            self.item_onehot = tf.one_hot(
+                np.arange(self.num_item), self.num_item).eval()
 
         for step in range(1, n_steps):
             batch_idx = np.random.randint(train_size, size=self.batch_size)

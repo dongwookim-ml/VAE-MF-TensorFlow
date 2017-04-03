@@ -1,4 +1,6 @@
-import os, itertools
+import itertools
+import os
+
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import KFold
@@ -26,6 +28,7 @@ lrates = [0.001, 0.002, 0.01, 0.02]
 bsizes = [128, 256, 512, 1024, 2048]
 regs = [0.001, 0.002, 0.01, 0.1, 0.5, 1]
 one_hots = [True, False]
+
 
 def read_dataset():
     M = np.zeros([num_user, num_item])
@@ -71,8 +74,9 @@ def train_test_validation():
     test_idx = idx[int(0.9 * num_rating):]
 
     for hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param, one_hot in itertools.product(hedims, hddims, ldims, odims, lrates, bsizes, regs, one_hots):
-        result_path = "{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}".format(hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param, one_hot)
-        if not os.path.exists(result_path+"/model.ckpt.index"):
+        result_path = "{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}".format(
+            hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param, one_hot)
+        if not os.path.exists(result_path + "/model.ckpt.index"):
             with tf.Session() as sess:
                 model = VAEMF(sess, num_user, num_item,
                               hidden_encoder_dim=hidden_encoder_dim, hidden_decoder_dim=hidden_decoder_dim,
@@ -82,10 +86,12 @@ def train_test_validation():
                 best_mse, best_mae = model.train_test_validation(
                     M, train_idx=train_idx, test_idx=test_idx, valid_idx=valid_idx, n_steps=n_steps, result_path=result_path)
 
-                print("Best MSE = {0}, best MAE = {1}".format(best_mse, best_mae))
+                print("Best MSE = {0}, best MAE = {1}".format(
+                    best_mse, best_mae))
 
                 with open('result.csv', 'a') as f:
-                    f.write("{0},{1},{2},{3},{4},{5},{6},{7},{8},{9}\n".format(hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param, one_hot, best_mse, best_mae))
+                    f.write("{0},{1},{2},{3},{4},{5},{6},{7},{8},{9}\n".format(hidden_encoder_dim, hidden_decoder_dim,
+                                                                               latent_dim, output_dim, learning_rate, batch_size, reg_param, one_hot, best_mse, best_mae))
 
         tf.reset_default_graph()
 
