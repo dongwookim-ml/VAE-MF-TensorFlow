@@ -7,8 +7,13 @@ from sklearn.model_selection import KFold
 
 from model import VAEMF
 
+# 100k dataset
 num_user = 943
 num_item = 1682
+
+# 1M dataset
+num_user = 6040
+num_item = 3952
 
 hidden_encoder_dim = 216
 hidden_decoder_dim = 216
@@ -29,12 +34,20 @@ bsizes = [128, 256, 512, 1024, 2048]
 regs = [0.001, 0.002, 0.01, 0.1, 0.5, 1]
 one_hots = [True, False]
 
+hedims = [512]
+hddims = [512]
+ldims = [128]
+odims = [128]
+lrates = [0.005]
+bsizes = [512]
+regs = [0, 0.001, 0.002, 0.01, 0.1, 1]
 
 def read_dataset():
     M = np.zeros([num_user, num_item])
-    with open('./data/ml-100k/u.data', 'r') as f:
+    # with open('./data/ml-100k/u.data', 'r') as f:
+    with open('./data/ml-1m/ratings.dat', 'r') as f:
         for line in f.readlines():
-            tokens = line.split()
+            tokens = line.split("::")
             user_id = int(tokens[0]) - 1  # 0 base index
             item_id = int(tokens[1]) - 1
             rating = int(tokens[2])

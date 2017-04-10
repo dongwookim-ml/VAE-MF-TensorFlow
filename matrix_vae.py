@@ -19,7 +19,7 @@ class VAEMF(object):
     def __init__(self, sess, num_user, num_item,
                  hidden_encoder_dim=216, hidden_decoder_dim=216, latent_dim=24,
                  output_dim=24, learning_rate=0.002, batch_size=64, reg_param=0,
-                 user_embed_dim=216, item_embed_dim=216):
+                 user_embed_dim=216, item_embed_dim=216, activate_fn=tf.tanh):
 
         if reg_param < 0 or reg_param > 1:
             raise ValueError("regularization parameter must be in [0,1]")
@@ -37,6 +37,7 @@ class VAEMF(object):
         self.user_embed_dim = user_embed_dim
         self.item_embed_dim = item_embed_dim
         self.user_input_dim = num_item
+        self.activate_fn = activate_fn
         self.build_model()
 
     def build_model(self):
@@ -52,7 +53,7 @@ class VAEMF(object):
         self.l2_loss += tf.nn.l2_loss(self.W_encoder_input_hidden_user)
 
         # Hidden layer encoder
-        self.hidden_encoder_user = tf.nn.relu(tf.matmul(
+        self.hidden_encoder_user = self.activate_fn(tf.matmul(
             self.user, self.W_encoder_input_hidden_user) + self.b_encoder_input_hidden_user)
 
         self.W_encoder_hidden_mu_user = weight_variable(
@@ -92,7 +93,7 @@ class VAEMF(object):
         self.l2_loss += tf.nn.l2_loss(self.W_decoder_z_hidden_user)
 
         # Hidden layer decoder
-        self.hidden_decoder_user = tf.nn.relu(tf.matmul(
+        self.hidden_decoder_user = self.activate_fn(tf.matmul(
             self.z_user, self.W_decoder_z_hidden_user) + self.b_decoder_z_hidden_user)
 
         self.W_decoder_hidden_reconstruction_user = weight_variable(
@@ -149,9 +150,15 @@ class VAEMF(object):
         validM[nonzero_user_idx[valid_idx], nonzero_item_idx[valid_idx]] = M[
             nonzero_user_idx[valid_idx], nonzero_item_idx[valid_idx]]
 
+        valid_user_idx = np.unique(validM.nonzero()[0])
+        valid_feed_dict = self.construct_feeddict(valid_user_idx, validM)
+
         testM = np.zeros(M.shape)
         testM[nonzero_user_idx[test_idx], nonzero_item_idx[test_idx]] = M[
             nonzero_user_idx[test_idx], nonzero_item_idx[test_idx]]
+
+        test_user_idx = np.unique(testM.nonzero()[0])
+        test_feed_dict = self.construct_feeddict(test_user_idx, testM)
 
         train_writer = tf.summary.FileWriter(
             result_path + '/train', graph=self.sess.graph)
@@ -177,28 +184,22 @@ class VAEMF(object):
             train_writer.add_summary(summary_str, step)
 
             if step % int(n_steps / 10) == 0:
-                valid_user_idx = nonzero_user_idx[valid_idx]
-                feed_dict = self.construct_feeddict(
-                    valid_user_idx, validM)
                 mse_valid, mae_valid, summary_str = self.sess.run(
-                    [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
+                    [self.MSE, self.MAE, self.summary_op], feed_dict=valid_feed_dict)
 
                 valid_writer.add_summary(summary_str, step)
 
-                test_user_idx = nonzero_user_idx[test_idx]
-                feed_dict = self.construct_feeddict(
-                    test_user_idx, testM)
                 mse_test, mae_test, summary_str = self.sess.run(
-                    [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
+                    [self.MSE, self.MAE, self.summary_op], feed_dict=test_feed_dict)
 
                 test_writer.add_summary(summary_str, step)
 
-                print("Step {0} | Train MSE: {1:3.4f}, MAE: {2:3.4f}".format(
-                    step, mse, mae))
-                print("         | Valid  MSE: {0:3.4f}, MAE: {1:3.4f}".format(
-                    mse_valid, mae_valid))
-                print("         | Test  MSE: {0:3.4f}, MAE: {1:3.4f}".format(
-                    mse_test, mae_test))
+                print("Step {0} | Train RMSE: {1:3.4f}, MAE: {2:3.4f}".format(
+                    step, np.sqrt(mse), mae))
+                print("         | Valid  RMSE: {0:3.4f}, MAE: {1:3.4f}".format(
+                    np.sqrt(mse_valid), mae_valid))
+                print("         | Test  RMSE: {0:3.4f}, MAE: {1:3.4f}".format(
+                    np.sqrt(mse_test), mae_test))
 
                 if best_val_mse > mse_valid:
                     best_val_mse = mse_valid
@@ -243,19 +244,19 @@ class VAEMF(object):
             if step % int(n_steps / 100) == 0:
 
                 if test_idx is not None:
-                    user_idx = nonzero_user_idx[test_idx]
+                    user_idx = np.unique(nonzero_user_idx)
                     feed_dict = self.construct_feeddict(user_idx, testM)
 
                     mse_test, mae_test, summary_str = self.sess.run(
                         [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
-                    print("Step {0} | Train MSE: {1:3.4f}, MAE: {2:3.4f}".format(
-                        step, mse, mae))
-                    print("         | Test  MSE: {0:3.4f}, MAE: {1:3.4f}".format(
-                        mse_test, mae_test))
+                    print("Step {0} | Train RMSE: {1:3.4f}, MAE: {2:3.4f}".format(
+                        step, np.sqrt(mse), mae))
+                    print("         | Test  RMSE: {0:3.4f}, MAE: {1:3.4f}".format(
+                        np.sqrt(mse_test), mae_test))
 
                     test_writer.add_summary(summary_str, step)
                 else:
-                    print("Step {0} | Train MSE: {1:3.4f}, MAE: {2:3.4f}".format(
-                        step, mse, mae))
+                    print("Step {0} | Train RMSE: {1:3.4f}, MAE: {2:3.4f}".format(
+                        step, np.sqrt(mse), mae))
 
         self.saver.save(self.sess, result_path + "/model.ckpt")
