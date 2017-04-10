@@ -145,7 +145,13 @@ class VAEMF(object):
         trainM[nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]] = M[
             nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]]
 
-        testM = M - trainM
+        validM = np.zeros(M.shape)
+        validM[nonzero_user_idx[valid_idx], nonzero_item_idx[valid_idx]] = M[
+            nonzero_user_idx[valid_idx], nonzero_item_idx[valid_idx]]
+
+        testM = np.zeros(M.shape)
+        testM[nonzero_user_idx[test_idx], nonzero_item_idx[test_idx]] = M[
+            nonzero_user_idx[test_idx], nonzero_item_idx[test_idx]]
 
         train_writer = tf.summary.FileWriter(
             result_path + '/train', graph=self.sess.graph)
@@ -173,7 +179,7 @@ class VAEMF(object):
             if step % int(n_steps / 10) == 0:
                 valid_user_idx = nonzero_user_idx[valid_idx]
                 feed_dict = self.construct_feeddict(
-                    valid_user_idx, testM)
+                    valid_user_idx, validM)
                 mse_valid, mae_valid, summary_str = self.sess.run(
                     [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
 
