@@ -233,8 +233,7 @@ class VAEMF(object):
         self.sess.run(tf.global_variables_initializer())
 
         for step in range(1, n_steps):
-            batch_idx = np.random.randint(train_size, size=self.batch_size)
-            user_idx = nonzero_user_idx[train_idx[batch_idx]]
+            user_idx = np.random.randint(self.num_user, size=self.batch_size)
             feed_dict = self.construct_feeddict(user_idx, trainM)
 
             _, mse, mae, summary_str = self.sess.run(
