@@ -80,13 +80,16 @@ class VAEMF(object):
                 [self.item_input_dim, self.hidden_encoder_dim], 'W_encoder_input_hidden_item')
             self.b_encoder_input_hidden_item = bias_variable(
                 [self.hidden_encoder_dim], 'b_encoder_input_hidden_item')
+
         self.l2_loss += tf.nn.l2_loss(self.W_encoder_input_hidden_user)
         self.l2_loss += tf.nn.l2_loss(self.W_encoder_input_hidden_item)
 
         # Hidden layer encoder
         if self.one_hot:
-            self.user_embed = tf.nn.embedding_lookup(self.W_user_embed, self.user_idx)
-            self.item_embed = tf.nn.embedding_lookup(self.W_item_embed, self.item_idx)
+            self.user_embed = tf.nn.embedding_lookup(
+                self.W_user_embed, self.user_idx)
+            self.item_embed = tf.nn.embedding_lookup(
+                self.W_item_embed, self.item_idx)
             self.hidden_encoder_user = tf.nn.relu(tf.matmul(
                 self.user_embed, self.W_encoder_input_hidden_user) + self.b_encoder_input_hidden_user)
             self.hidden_encoder_item = tf.nn.relu(tf.matmul(
@@ -148,53 +151,31 @@ class VAEMF(object):
         self.z_item = self.mu_encoder_item + \
             tf.multiply(self.std_encoder_item, self.epsilon_item)
 
-        # decoding network
-        self.W_decoder_z_hidden_user = weight_variable(
-            [self.latent_dim, self.hidden_decoder_dim], 'W_decoder_z_hidden_user')
-        self.b_decoder_z_hidden_user = bias_variable(
-            [self.hidden_decoder_dim], 'b_decoder_z_hidden_user')
-        self.l2_loss += tf.nn.l2_loss(self.W_decoder_z_hidden_user)
-
-        self.W_decoder_z_hidden_item = weight_variable(
-            [self.latent_dim, self.hidden_decoder_dim], 'W_decoder_z_hidden_item')
-        self.b_decoder_z_hidden_item = bias_variable(
-            [self.hidden_decoder_dim], 'b_decoder_z_hidden_item')
-        self.l2_loss += tf.nn.l2_loss(self.W_decoder_z_hidden_item)
-
-        # Hidden layer decoder
-        self.hidden_decoder_user = tf.nn.relu(tf.matmul(
-            self.z_user, self.W_decoder_z_hidden_user) + self.b_decoder_z_hidden_user)
-        self.hidden_decoder_item = tf.nn.relu(tf.matmul(
-            self.z_item, self.W_decoder_z_hidden_item) + self.b_decoder_z_hidden_item)
-
-        self.W_decoder_hidden_reconstruction_user = weight_variable(
-            [self.hidden_decoder_dim, self.output_dim], 'W_decoder_hidden_reconstruction_user')
-        self.b_decoder_hidden_reconstruction_user = bias_variable(
-            [self.output_dim], 'b_decoder_hidden_reconstruction_user')
-        self.l2_loss += tf.nn.l2_loss(
-            self.W_decoder_hidden_reconstruction_user)
-
-        self.W_decoder_hidden_reconstruction_item = weight_variable(
-            [self.hidden_decoder_dim, self.output_dim], 'W_decoder_hidden_reconstruction_item')
-        self.b_decoder_hidden_reconstruction_item = bias_variable(
-            [self.output_dim], 'b_decoder_hidden_reconstruction_item')
-        self.l2_loss += tf.nn.l2_loss(
-            self.W_decoder_hidden_reconstruction_item)
-
-        self.reconstructed_user = tf.matmul(
-            self.hidden_decoder_user, self.W_decoder_hidden_reconstruction_user) + self.b_decoder_hidden_reconstruction_user
-        self.reconstructed_item = tf.matmul(
-            self.hidden_decoder_item, self.W_decoder_hidden_reconstruction_item) + self.b_decoder_hidden_reconstruction_item
-
         # KL divergence between prior and variational distributions
         self.KLD = -0.5 * tf.reduce_sum(1 + self.logvar_encoder_user - tf.pow(
             self.mu_encoder_user, 2) - tf.exp(self.logvar_encoder_user), reduction_indices=1)
         self.KLD -= 0.5 * tf.reduce_sum(1 + self.logvar_encoder_item - tf.pow(
             self.mu_encoder_item, 2) - tf.exp(self.logvar_encoder_item), reduction_indices=1)
 
-        # rating_hat = tf.diag_part(tf.matmul(z_user, tf.transpose(z_item)))
-        self.rating_hat = tf.diag_part(
-            tf.matmul(self.reconstructed_user, tf.transpose(self.reconstructed_item)))
+        # where the tricky part starts
+        self.W_encoder_latent_latent = weight_variable(
+            [5, self.latent_dim, self.latent_dim], 'W_encoder_latent_latent')
+        self.l2_loss += tf.nn.l2_loss(self.W_encoder_latent_latent)
+
+        self.multi = list()
+        for i in range(5):
+            self.multi.append(tf.exp(tf.diag_part(
+            tf.matmul(tf.matmul(self.z_user, self.W_encoder_latent_latent[i]), self.z_item, transpose_b=True))))
+
+        self.multi_sum = tf.add_n(self.multi)
+        self.rating_hat = tf.divide(self.multi[0], self.multi_sum)
+        for i in range(1, 5):
+            self.rating_hat += (i+1) * tf.divide(self.multi[i], self.multi_sum)
+
+        # self.softmax = self.multi / tf.reduce_sum(self.multi, 0)
+        # self.tmp = tf.constant(tf.range(1, 6))
+        # self.rating_hat = tf.reduce_sum(tf.multiply(self.tmp, self.softmax), 0)
+
         self.MSE = tf.reduce_mean(
             tf.square(tf.subtract(self.rating, self.rating_hat)))
         self.MAE = tf.reduce_mean(
@@ -325,7 +306,7 @@ class VAEMF(object):
                 [self.train_step, self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
             train_writer.add_summary(summary_str, step)
 
-            if step % int(n_steps / 100) == 0:
+            if step % 1000 == 0:
 
                 if test_idx is not None:
                     user_idx = nonzero_user_idx[test_idx]
