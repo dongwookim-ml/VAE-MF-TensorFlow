@@ -10,13 +10,14 @@ from model import VAEMF
 num_user = 943
 num_item = 1682
 
-hidden_encoder_dim = 216
-hidden_decoder_dim = 216
-latent_dim = 24
-output_dim = 24
-learning_rate = 0.002
-batch_size = 64
+hidden_encoder_dim = 500
+hidden_decoder_dim = 500
+latent_dim = 250
+output_dim = 250
+learning_rate = 0.001
+batch_size = 128
 reg_param = 0
+one_hot = False
 
 n_steps = 10000
 
@@ -61,6 +62,33 @@ def cross_validation():
                         test_idx=test_idx, n_steps=n_steps)
 
 
+def train():
+    M = read_dataset()
+
+    num_rating = np.count_nonzero(M)
+    idx = np.arange(num_rating)
+    np.random.seed(0)
+    np.random.shuffle(idx)
+
+    train_idx = idx[:int(0.8 * num_rating)]
+    valid_idx = idx[int(0.8 * num_rating):int(0.9 * num_rating)]
+    test_idx = idx[int(0.9 * num_rating):]
+
+    result_path = "{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}".format(
+        hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param, one_hot)
+    if not os.path.exists(result_path + "/model.ckpt.index"):
+        with tf.Session() as sess:
+            model = VAEMF(sess, num_user, num_item,
+                          hidden_encoder_dim=hidden_encoder_dim, hidden_decoder_dim=hidden_decoder_dim,
+                          latent_dim=latent_dim, output_dim=output_dim, learning_rate=learning_rate, batch_size=batch_size, reg_param=reg_param, one_hot=one_hot)
+            print("Train size={0}, Validation size={1}, Test size={2}".format(
+                train_idx.size, valid_idx.size, test_idx.size))
+            best_mse, best_mae = model.train_test_validation(
+                M, train_idx=train_idx, test_idx=test_idx, valid_idx=valid_idx, n_steps=n_steps, result_path=result_path)
+
+            print("Best MSE = {0}, best MAE = {1}".format(
+                best_mse, best_mae))
+
 def train_test_validation():
     M = read_dataset()
 
@@ -95,5 +123,7 @@ def train_test_validation():
 
         tf.reset_default_graph()
 
+
 if __name__ == '__main__':
-    train_test_validation()
+    train()
+    # train_test_validation()
