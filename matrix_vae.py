@@ -19,7 +19,7 @@ class VAEMF(object):
     def __init__(self, sess, num_user, num_item,
                  hidden_encoder_dim=216, hidden_decoder_dim=216, latent_dim=24,
                  output_dim=24, learning_rate=0.002, batch_size=64, reg_param=0,
-                 user_embed_dim=216, item_embed_dim=216, activate_fn=tf.tanh):
+                 user_embed_dim=216, item_embed_dim=216, activate_fn=tf.tanh, vae=True):
 
         if reg_param < 0 or reg_param > 1:
             raise ValueError("regularization parameter must be in [0,1]")
@@ -38,6 +38,7 @@ class VAEMF(object):
         self.item_embed_dim = item_embed_dim
         self.user_input_dim = num_item
         self.activate_fn = activate_fn
+        self.vae = vae
         self.build_model()
 
     def build_model(self):
@@ -45,6 +46,9 @@ class VAEMF(object):
 
         self.user = tf.placeholder("float", shape=[None, self.user_input_dim])
         self.rating = tf.placeholder("float", shape=[None, self.output_dim])
+
+        self.valid_weight = tf.placeholder("float", shape=[self.num_user, self.num_item])
+        self.test_weight = tf.placeholder("float", shape=[self.num_user, self.num_item])
 
         self.W_encoder_input_hidden_user = weight_variable(
             [self.user_input_dim, self.hidden_encoder_dim], 'W_encoder_input_hidden_user')
@@ -72,18 +76,21 @@ class VAEMF(object):
             [self.latent_dim], 'b_encoder_hidden_logvar_user')
         self.l2_loss += tf.nn.l2_loss(self.W_encoder_hidden_logvar_user)
 
-        # Sigma encoder
-        self.logvar_encoder_user = tf.matmul(
-            self.hidden_encoder_user, self.W_encoder_hidden_logvar_user) + self.b_encoder_hidden_logvar_user
+        if self.vae:
+            # Sigma encoder
+            self.logvar_encoder_user = tf.matmul(
+                self.hidden_encoder_user, self.W_encoder_hidden_logvar_user) + self.b_encoder_hidden_logvar_user
 
-        # Sample epsilon
-        self.epsilon_user = tf.random_normal(
-            tf.shape(self.logvar_encoder_user), name='epsilon_user')
+            # Sample epsilon
+            self.epsilon_user = tf.random_normal(
+                tf.shape(self.logvar_encoder_user), name='epsilon_user')
 
-        # Sample latent variable
-        self.std_encoder_user = tf.exp(0.5 * self.logvar_encoder_user)
-        self.z_user = self.mu_encoder_user + \
-            tf.multiply(self.std_encoder_user, self.epsilon_user)
+            # Sample latent variable
+            self.std_encoder_user = tf.exp(0.5 * self.logvar_encoder_user)
+            self.z_user = self.mu_encoder_user + \
+                tf.multiply(self.std_encoder_user, self.epsilon_user)
+        else:
+            self.z_user = self.mu_encoder_user
 
         # decoding network
         self.W_decoder_z_hidden_user = weight_variable(
@@ -106,18 +113,26 @@ class VAEMF(object):
         self.reconstructed_rating = tf.matmul(
             self.hidden_decoder_user, self.W_decoder_hidden_reconstruction_user) + self.b_decoder_hidden_reconstruction_user
 
-        # KL divergence between prior and variational distributions
-        self.KLD = -0.5 * tf.reduce_sum(1 + self.logvar_encoder_user - tf.pow(
-            self.mu_encoder_user, 2) - tf.exp(self.logvar_encoder_user), reduction_indices=1)
-
-        zero = tf.constant(0, dtype=tf.float32)
-        weight = tf.not_equal(self.rating, zero)
+        weight = tf.not_equal(self.rating, tf.constant(0, dtype=tf.float32))
 
         self.MSE = tf.losses.mean_squared_error(self.rating, self.reconstructed_rating, weight)
         self.MAE = tf.losses.absolute_difference(self.rating, self.reconstructed_rating, weight)
 
-        self.loss = tf.reduce_mean(self.KLD + self.MSE)
+        if self.vae:
+            # KL divergence between prior and variational distributions
+            self.KLD = -0.5 * tf.reduce_sum(1 + self.logvar_encoder_user - tf.pow(
+                self.mu_encoder_user, 2) - tf.exp(self.logvar_encoder_user), reduction_indices=1)
+            self.loss = tf.reduce_mean(self.KLD + self.MSE)
+        else:
+            self.loss = tf.reduce_mean(self.MSE)
+
         self.regularized_loss = self.loss + self.reg_param * self.l2_loss
+
+        # for valid and test datasets, self.rating should be num_user x num_item tensor
+        self.validMSE = tf.losses.mean_squared_error(self.rating, self.reconstructed_rating, self.valid_weight)
+        self.validMAE = tf.losses.absolute_difference(self.rating, self.reconstructed_rating, self.valid_weight)
+        self.testMSE = tf.losses.mean_squared_error(self.rating, self.reconstructed_rating, self.test_weight)
+        self.testMAE = tf.losses.absolute_difference(self.rating, self.reconstructed_rating, self.test_weight)
 
         tf.summary.scalar("MSE", self.MSE)
         tf.summary.scalar("MAE", self.MAE)
@@ -137,6 +152,14 @@ class VAEMF(object):
         feed_dict = {self.user: M[user_idx, :], self.rating: M[user_idx, :]}
         return feed_dict
 
+    def construct_feeddict2(self, user_idx, M, W):
+        feed_dict = {self.user: M[user_idx, :], self.rating: M[user_idx, :], self.valid_weight:W}
+        return feed_dict
+
+    def construct_feeddict3(self, user_idx, M, W):
+        feed_dict = {self.user: M[user_idx, :], self.rating: M[user_idx, :], self.test_weight:W}
+        return feed_dict
+
     def train_test_validation(self, M, train_idx, test_idx, valid_idx, n_steps=100000, result_path='result/'):
         nonzero_user_idx = M.nonzero()[0]
         nonzero_item_idx = M.nonzero()[1]
@@ -146,19 +169,10 @@ class VAEMF(object):
         trainM[nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]] = M[
             nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]]
 
-        validM = np.zeros(M.shape)
-        validM[nonzero_user_idx[valid_idx], nonzero_item_idx[valid_idx]] = M[
-            nonzero_user_idx[valid_idx], nonzero_item_idx[valid_idx]]
-
-        valid_user_idx = np.unique(validM.nonzero()[0])
-        valid_feed_dict = self.construct_feeddict(valid_user_idx, validM)
-
-        testM = np.zeros(M.shape)
-        testM[nonzero_user_idx[test_idx], nonzero_item_idx[test_idx]] = M[
-            nonzero_user_idx[test_idx], nonzero_item_idx[test_idx]]
-
-        test_user_idx = np.unique(testM.nonzero()[0])
-        test_feed_dict = self.construct_feeddict(test_user_idx, testM)
+        valid_weight_matrix = np.zeros(M.shape)
+        valid_weight_matrix[nonzero_user_idx[valid_idx], nonzero_item_idx[valid_idx]] = 1
+        test_weight_matrix = np.zeros(M.shape)
+        test_weight_matrix[nonzero_user_idx[test_idx], nonzero_item_idx[test_idx]] = 1
 
         train_writer = tf.summary.FileWriter(
             result_path + '/train', graph=self.sess.graph)
@@ -184,13 +198,17 @@ class VAEMF(object):
             train_writer.add_summary(summary_str, step)
 
             if step % int(n_steps / 10) == 0:
+                valid_user_idx = np.arange(self.num_user)
+                valid_feed_dict = self.construct_feeddict2(valid_user_idx, trainM, valid_weight_matrix)
                 mse_valid, mae_valid, summary_str = self.sess.run(
-                    [self.MSE, self.MAE, self.summary_op], feed_dict=valid_feed_dict)
+                    [self.validMSE, self.validMAE, self.summary_op], feed_dict=valid_feed_dict)
 
                 valid_writer.add_summary(summary_str, step)
 
+                test_user_idx = np.arange(self.num_user)
+                test_feed_dict = self.construct_feeddict3(test_user_idx, trainM, test_weight_matrix)
                 mse_test, mae_test, summary_str = self.sess.run(
-                    [self.MSE, self.MAE, self.summary_op], feed_dict=test_feed_dict)
+                    [self.testMSE, self.testMAE, self.summary_op], feed_dict=test_feed_dict)
 
                 test_writer.add_summary(summary_str, step)
 

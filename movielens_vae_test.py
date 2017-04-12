@@ -7,13 +7,16 @@ from sklearn.model_selection import KFold
 
 from matrix_vae import VAEMF
 
-# 100k dataset
-num_user = 943
-num_item = 1682
+dataset = "ml-100k"
 
-# 1M dataset
-num_user = 6040
-num_item = 3952
+if dataset == "ml-100k":
+    # 100k dataset
+    num_user = 943
+    num_item = 1682
+else:
+    # 1M dataset
+    num_user = 6040
+    num_item = 3952
 
 hidden_encoder_dim = 216
 hidden_decoder_dim = 216
@@ -23,23 +26,28 @@ learning_rate = 0.002
 batch_size = 64
 reg_param = 0
 
-n_steps = 10000
+n_steps = 1000
 
-hedims = [512]
-hddims = [512]
-ldims = [128]
-odims = [128]
-lrates = [0.005]
+hedims = [500]
+hddims = [500]
+ldims = [100,500]
+odims = [500]
+lrates = [0.001]
 bsizes = [512]
 regs = [0, 0.001, 0.002, 0.01, 0.1, 1]
-
+vaes = [False]
 
 def read_dataset():
     M = np.zeros([num_user, num_item])
-    # with open('./data/ml-100k/u.data', 'r') as f:
-    with open('./data/ml-1m/ratings.dat', 'r') as f:
+    if dataset == "ml-100k":
+        path ="./data/ml-100k/u.data"
+        delim = "\t"
+    else:
+        path = "./data/ml-1m/ratings.dat"
+        delim = "::"
+    with open(path, 'r') as f:
         for line in f.readlines():
-            tokens = line.split("::")
+            tokens = line.split(delim)
             user_id = int(tokens[0]) - 1  # 0 base index
             item_id = int(tokens[1]) - 1
             rating = int(tokens[2])
@@ -78,14 +86,14 @@ def train_test_validation():
     valid_idx = idx[int(0.85 * num_rating):int(0.90 * num_rating)]
     test_idx = idx[int(0.90 * num_rating):]
 
-    for hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param in itertools.product(hedims, hddims, ldims, odims, lrates, bsizes, regs):
-        result_path = "{0}_{1}_{2}_{3}_{4}_{5}_{6}".format(
-            hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param)
+    for hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param, vae in itertools.product(hedims, hddims, ldims, odims, lrates, bsizes, regs, vaes):
+        result_path = "{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}".format(
+            hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param, vae)
         if not os.path.exists(result_path + "/model.ckpt.index"):
             with tf.Session() as sess:
                 model = VAEMF(sess, num_user, num_item,
                               hidden_encoder_dim=hidden_encoder_dim, hidden_decoder_dim=hidden_decoder_dim,
-                              latent_dim=latent_dim, output_dim=output_dim, learning_rate=learning_rate, batch_size=batch_size, reg_param=reg_param)
+                              latent_dim=latent_dim, output_dim=output_dim, learning_rate=learning_rate, batch_size=batch_size, reg_param=reg_param, vae=vae)
                 print("Train size={0}, Validation size={1}, Test size={2}".format(
                     train_idx.size, valid_idx.size, test_idx.size))
                 best_mse, best_mae = model.train_test_validation(
@@ -95,8 +103,8 @@ def train_test_validation():
                     best_mse, best_mae))
 
                 with open('result.csv', 'a') as f:
-                    f.write("{0},{1},{2},{3},{4},{5},{6},{7},{8}\n".format(hidden_encoder_dim, hidden_decoder_dim,
-                                                                               latent_dim, output_dim, learning_rate, batch_size, reg_param, best_mse, best_mae))
+                    f.write("{0},{1},{2},{3},{4},{5},{6},{7},{8},{9}\n".format(hidden_encoder_dim, hidden_decoder_dim,
+                                                                               latent_dim, output_dim, learning_rate, batch_size, reg_param, vae, best_mse, best_mae))
 
         tf.reset_default_graph()
 
