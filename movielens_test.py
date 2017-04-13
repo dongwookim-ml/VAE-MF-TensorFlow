@@ -19,16 +19,16 @@ batch_size = 128
 reg_param = 0
 one_hot = False
 
-n_steps = 10000
+n_steps = 1000000
 
-hedims = [128, 256, 512]
-hddims = [128, 256, 512]
-ldims = [16, 32, 64, 128]
-odims = [16, 32, 64, 128]
+hedims = [500]
+hddims = [500]
+ldims = [25, 64, 128]
+odims = [25, 64, 128]
 lrates = [0.001, 0.002, 0.01, 0.02]
-bsizes = [128, 256, 512, 1024, 2048]
-regs = [0.001, 0.002, 0.01, 0.1, 0.5, 1]
-one_hots = [True, False]
+bsizes = [512, 1024, 2048]
+regs = [1e-7, 0.001, 0.002, 0.01, 0.1, 0.5, 1]
+one_hots = [False, True]
 
 
 def read_dataset():
