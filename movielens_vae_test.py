@@ -30,10 +30,10 @@ n_steps = 2
 
 hedims = [500]
 hddims = [500]
-ldims = [100]
+ldims = [250]
 lrates = [0.001]
 bsizes = [512]
-regs = [0, 1e-10, 1e-7, 1e-5]
+regs = [0, 1e-10, 1e-7, 1e-5, 1e-3, 1e-1]
 vaes = [True]
 
 def read_dataset():
@@ -86,7 +86,7 @@ def train_test_validation():
     test_idx = idx[int(0.90 * num_rating):]
 
     for hidden_encoder_dim, hidden_decoder_dim, latent_dim, learning_rate, batch_size, reg_param, vae in itertools.product(hedims, hddims, ldims, lrates, bsizes, regs, vaes):
-        result_path = "{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}".format(
+        result_path = "{0}_{1}_{2}_{3}_{4}_{5}_{6}".format(
             hidden_encoder_dim, hidden_decoder_dim, latent_dim, learning_rate, batch_size, reg_param, vae)
         if not os.path.exists(result_path + "/model.ckpt.index"):
             config = tf.ConfigProto()
