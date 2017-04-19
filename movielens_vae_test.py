@@ -26,7 +26,7 @@ learning_rate = 0.002
 batch_size = 64
 reg_param = 1e-10
 
-n_steps = 2
+n_steps = 1000
 
 hedims = [500]
 hddims = [500]
