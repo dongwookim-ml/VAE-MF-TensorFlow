@@ -22,17 +22,15 @@ else:
 hidden_encoder_dim = 216
 hidden_decoder_dim = 216
 latent_dim = 24
-output_dim = 24
 learning_rate = 0.002
 batch_size = 64
 reg_param = 1e-10
 
-n_steps = 1000
+n_steps = 2
 
 hedims = [500]
 hddims = [500]
 ldims = [100]
-odims = [500]
 lrates = [0.001]
 bsizes = [512]
 regs = [0, 1e-10, 1e-7, 1e-5]
@@ -87,27 +85,26 @@ def train_test_validation():
     valid_idx = idx[int(0.85 * num_rating):int(0.90 * num_rating)]
     test_idx = idx[int(0.90 * num_rating):]
 
-    for hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param, vae in itertools.product(hedims, hddims, ldims, odims, lrates, bsizes, regs, vaes):
+    for hidden_encoder_dim, hidden_decoder_dim, latent_dim, learning_rate, batch_size, reg_param, vae in itertools.product(hedims, hddims, ldims, lrates, bsizes, regs, vaes):
         result_path = "{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}".format(
-            hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param, vae)
+            hidden_encoder_dim, hidden_decoder_dim, latent_dim, learning_rate, batch_size, reg_param, vae)
         if not os.path.exists(result_path + "/model.ckpt.index"):
             config = tf.ConfigProto()
             config.gpu_options.allow_growth=True
             with tf.Session(config=config) as sess:
                 model = VAEMF(sess, num_user, num_item,
                               hidden_encoder_dim=hidden_encoder_dim, hidden_decoder_dim=hidden_decoder_dim,
-                              latent_dim=latent_dim, output_dim=output_dim, learning_rate=learning_rate, batch_size=batch_size, reg_param=reg_param, vae=vae)
+                              latent_dim=latent_dim, learning_rate=learning_rate, batch_size=batch_size, reg_param=reg_param, vae=vae)
                 print("Train size={0}, Validation size={1}, Test size={2}".format(
                     train_idx.size, valid_idx.size, test_idx.size))
-                best_mse, best_mae = model.train_test_validation(
-                    M, train_idx=train_idx, test_idx=test_idx, valid_idx=valid_idx, n_steps=n_steps, result_path=result_path)
+                print(result_path)
+                best_rmse = model.train_test_validation(M, train_idx=train_idx, test_idx=test_idx, valid_idx=valid_idx, n_steps=n_steps, result_path=result_path)
 
-                print("Best MSE = {0}, best MAE = {1}".format(
-                    best_mse, best_mae))
+                print("Best MSE = {0}".format(best_rmse))
 
                 with open('result.csv', 'a') as f:
-                    f.write("{0},{1},{2},{3},{4},{5},{6},{7},{8},{9}\n".format(hidden_encoder_dim, hidden_decoder_dim,
-                                                                               latent_dim, output_dim, learning_rate, batch_size, reg_param, vae, best_mse, best_mae))
+                    f.write("{0},{1},{2},{3},{4},{5},{6},{7}\n".format(hidden_encoder_dim, hidden_decoder_dim,
+                                                                               latent_dim, learning_rate, batch_size, reg_param, vae, best_rmse))
 
         tf.reset_default_graph()
 

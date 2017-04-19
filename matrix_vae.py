@@ -18,7 +18,7 @@ class VAEMF(object):
 
     def __init__(self, sess, num_user, num_item,
                  hidden_encoder_dim=216, hidden_decoder_dim=216, latent_dim=24,
-                 output_dim=24, learning_rate=0.002, batch_size=64, reg_param=0,
+                 learning_rate=0.002, batch_size=64, reg_param=0,
                  user_embed_dim=216, item_embed_dim=216, activate_fn=tf.tanh, vae=True):
 
         if reg_param < 0 or reg_param > 1:
@@ -166,8 +166,10 @@ class VAEMF(object):
         train_writer = tf.summary.FileWriter(
             result_path + '/train', graph=self.sess.graph)
 
-        self.sess.run(tf.global_variables_initializer())
+        best_val_rmse = np.inf
+        best_test_rmse = 0
 
+        self.sess.run(tf.global_variables_initializer())
         for step in range(1, n_steps):
             feed_dict = {self.user: trainM, self.valid_rating:validM, self.test_rating:testM}
 
@@ -176,4 +178,9 @@ class VAEMF(object):
             train_writer.add_summary(summary_str, step)
             print("Iter {0} Train RMSE:{1}, Valid RMSE:{2}, Test RMSE:{3}".format(step, np.sqrt(mse), valid_rmse, test_rmse))
 
+            if best_val_rmse > valid_rmse:
+                best_val_rmse = valid_rmse
+                best_test_rmse = test_rmse
+
         self.saver.save(self.sess, result_path + "/model.ckpt")
+        return best_test_rmse
