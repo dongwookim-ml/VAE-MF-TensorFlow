@@ -158,23 +158,32 @@ class VAEMF(object):
             self.mu_encoder_item, 2) - tf.exp(self.logvar_encoder_item), reduction_indices=1)
 
         # where the tricky part starts
-        self.W_encoder_latent_latent = weight_variable(
-            [5, self.latent_dim, self.latent_dim], 'W_encoder_latent_latent')
-        self.l2_loss += tf.nn.l2_loss(self.W_encoder_latent_latent)
+        # self.W_encoder_latent_latent = weight_variable(
+        #     [5, self.latent_dim, self.latent_dim], 'W_encoder_latent_latent')
+        # self.l2_loss += tf.nn.l2_loss(self.W_encoder_latent_latent)
 
-        self.multi = list()
-        for i in range(5):
-            self.multi.append(tf.exp(tf.diag_part(
-            tf.matmul(tf.matmul(self.z_user, self.W_encoder_latent_latent[i]), self.z_item, transpose_b=True))))
+        self.user_bias = bias_variable(self.num_user, 'user_bias')
+        self.item_bias = bias_variable(self.num_item, 'item_bias')
 
-        self.multi_sum = tf.add_n(self.multi)
-        self.rating_hat = tf.divide(self.multi[0], self.multi_sum)
-        for i in range(1, 5):
-            self.rating_hat += (i+1) * tf.divide(self.multi[i], self.multi_sum)
+        # self.multi = list()
+        # for i in range(5):
+        #     self.multi.append(tf.diag_part(
+        #     tf.matmul(tf.matmul(self.z_user, self.W_encoder_latent_latent[i]), self.z_item, transpose_b=True)))
+        #     self.multi[i] = tf.add(self.multi[i], tf.nn.embedding_lookup(self.user_bias, self.user_idx))
+        #     self.multi[i] = tf.add(self.multi[i], tf.nn.embedding_lookup(self.item_bias, self.item_idx))
+        #     self.multi[i] = tf.exp(self.multi[i])
+        #
+        # self.multi_sum = tf.add_n(self.multi)
+        # self.rating_hat = tf.divide(self.multi[0], self.multi_sum)
+        # for i in range(1, 5):
+        #     self.rating_hat += (i+1) * tf.divide(self.multi[i], self.multi_sum)
 
-        # self.softmax = self.multi / tf.reduce_sum(self.multi, 0)
-        # self.tmp = tf.constant(tf.range(1, 6))
-        # self.rating_hat = tf.reduce_sum(tf.multiply(self.tmp, self.softmax), 0)
+        self.W_encoder_latent_latent = weight_variable([self.latent_dim, self.latent_dim], 'weighted_inner_product')
+
+        # self.rating_hat = tf.diag_part(tf.matmul(tf.matmul(self.z_user, self.W_encoder_latent_latent), self.z_item, transpose_b=True))
+        self.rating_hat = tf.reduce_sum(tf.multiply(tf.matmul(self.z_user, self.W_encoder_latent_latent), self.z_item), reduction_indices=1)
+        self.rating_hat = tf.add(self.rating_hat, tf.nn.embedding_lookup(self.user_bias, self.user_idx))
+        self.rating_hat = tf.add(self.rating_hat, tf.nn.embedding_lookup(self.item_bias, self.item_idx))
 
         self.MSE = tf.reduce_mean(
             tf.square(tf.subtract(self.rating, self.rating_hat)))
@@ -204,7 +213,7 @@ class VAEMF(object):
                          self.rating: M[user_idx, item_idx]}
         else:
             feed_dict = {self.user: M[user_idx, :], self.item: M[
-                :, item_idx].transpose(), self.rating: M[user_idx, item_idx]}
+                :, item_idx].transpose(), self.user_idx:user_idx, self.item_idx:item_idx, self.rating: M[user_idx, item_idx]}
         return feed_dict
 
     def train_test_validation(self, M, train_idx, test_idx, valid_idx, n_steps=100000, result_path='result/'):

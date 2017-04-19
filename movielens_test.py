@@ -12,14 +12,14 @@ num_item = 1682
 
 hidden_encoder_dim = 500
 hidden_decoder_dim = 500
-latent_dim = 250
-output_dim = 250
+latent_dim = 25
+output_dim = 25
 learning_rate = 0.001
-batch_size = 128
-reg_param = 0
-one_hot = False
+batch_size = 256
+reg_param = 1e-7
+one_hot = True
 
-n_steps = 1000000
+n_steps = 100000
 
 hedims = [500]
 hddims = [500]
