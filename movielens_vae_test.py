@@ -91,7 +91,9 @@ def train_test_validation():
         result_path = "{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}".format(
             hidden_encoder_dim, hidden_decoder_dim, latent_dim, output_dim, learning_rate, batch_size, reg_param, vae)
         if not os.path.exists(result_path + "/model.ckpt.index"):
-            with tf.Session() as sess:
+            config = tf.ConfigProto()
+            config.gpu_options.allow_growth=True
+            with tf.Session(config=config) as sess:
                 model = VAEMF(sess, num_user, num_item,
                               hidden_encoder_dim=hidden_encoder_dim, hidden_decoder_dim=hidden_decoder_dim,
                               latent_dim=latent_dim, output_dim=output_dim, learning_rate=learning_rate, batch_size=batch_size, reg_param=reg_param, vae=vae)
