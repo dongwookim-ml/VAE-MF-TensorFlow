@@ -7,7 +7,8 @@ from sklearn.model_selection import KFold
 
 from matrix_vae import VAEMF
 
-dataset = "ml-100k"
+# dataset = "ml-100k"
+dataset = "ml-1m"
 
 if dataset == "ml-100k":
     # 100k dataset
@@ -24,18 +25,18 @@ latent_dim = 24
 output_dim = 24
 learning_rate = 0.002
 batch_size = 64
-reg_param = 0
+reg_param = 1e-10
 
 n_steps = 1000
 
 hedims = [500]
 hddims = [500]
-ldims = [100,500]
+ldims = [100]
 odims = [500]
 lrates = [0.001]
 bsizes = [512]
-regs = [0, 0.001, 0.002, 0.01, 0.1, 1]
-vaes = [False]
+regs = [0, 1e-10, 1e-7, 1e-5]
+vaes = [True]
 
 def read_dataset():
     M = np.zeros([num_user, num_item])

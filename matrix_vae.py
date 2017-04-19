@@ -30,13 +30,11 @@ class VAEMF(object):
         self.hidden_encoder_dim = hidden_encoder_dim
         self.hidden_decoder_dim = hidden_decoder_dim
         self.latent_dim = latent_dim
-        self.output_dim = num_item
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.reg_param = reg_param
         self.user_embed_dim = user_embed_dim
         self.item_embed_dim = item_embed_dim
-        self.user_input_dim = num_item
         self.activate_fn = activate_fn
         self.vae = vae
         self.build_model()
@@ -44,14 +42,12 @@ class VAEMF(object):
     def build_model(self):
         self.l2_loss = tf.constant(0.0)
 
-        self.user = tf.placeholder("float", shape=[None, self.user_input_dim])
-        self.rating = tf.placeholder("float", shape=[None, self.output_dim])
-
-        self.valid_weight = tf.placeholder("float", shape=[self.num_user, self.num_item])
-        self.test_weight = tf.placeholder("float", shape=[self.num_user, self.num_item])
+        self.user = tf.placeholder("float", shape=[None, self.num_item])
+        self.valid_rating = tf.placeholder("float", shape=[None, self.num_item])
+        self.test_rating = tf.placeholder("float", shape=[None, self.num_item])
 
         self.W_encoder_input_hidden_user = weight_variable(
-            [self.user_input_dim, self.hidden_encoder_dim], 'W_encoder_input_hidden_user')
+            [self.num_item, self.hidden_encoder_dim], 'W_encoder_input_hidden_user')
         self.b_encoder_input_hidden_user = bias_variable(
             [self.hidden_encoder_dim], 'b_encoder_input_hidden_user')
         self.l2_loss += tf.nn.l2_loss(self.W_encoder_input_hidden_user)
@@ -104,19 +100,19 @@ class VAEMF(object):
             self.z_user, self.W_decoder_z_hidden_user) + self.b_decoder_z_hidden_user)
 
         self.W_decoder_hidden_reconstruction_user = weight_variable(
-            [self.hidden_decoder_dim, self.output_dim], 'W_decoder_hidden_reconstruction_user')
+            [self.hidden_decoder_dim, self.num_item], 'W_decoder_hidden_reconstruction_user')
         self.b_decoder_hidden_reconstruction_user = bias_variable(
-            [self.output_dim], 'b_decoder_hidden_reconstruction_user')
+            [self.num_item], 'b_decoder_hidden_reconstruction_user')
         self.l2_loss += tf.nn.l2_loss(
             self.W_decoder_hidden_reconstruction_user)
 
-        self.reconstructed_rating = tf.matmul(
+        self.reconstructed_user = tf.matmul(
             self.hidden_decoder_user, self.W_decoder_hidden_reconstruction_user) + self.b_decoder_hidden_reconstruction_user
 
-        weight = tf.not_equal(self.rating, tf.constant(0, dtype=tf.float32))
+        weight = tf.not_equal(self.user, tf.constant(0, dtype=tf.float32))
 
-        self.MSE = tf.losses.mean_squared_error(self.rating, self.reconstructed_rating, weight)
-        self.MAE = tf.losses.absolute_difference(self.rating, self.reconstructed_rating, weight)
+        self.MSE = tf.losses.mean_squared_error(self.user, self.reconstructed_user, weight)
+        self.MAE = tf.losses.absolute_difference(self.user, self.reconstructed_user, weight)
 
         if self.vae:
             # KL divergence between prior and variational distributions
@@ -128,15 +124,16 @@ class VAEMF(object):
 
         self.regularized_loss = self.loss + self.reg_param * self.l2_loss
 
-        # for valid and test datasets, self.rating should be num_user x num_item tensor
-        self.validMSE = tf.losses.mean_squared_error(self.rating, self.reconstructed_rating, self.valid_weight)
-        self.validMAE = tf.losses.absolute_difference(self.rating, self.reconstructed_rating, self.valid_weight)
-        self.testMSE = tf.losses.mean_squared_error(self.rating, self.reconstructed_rating, self.test_weight)
-        self.testMAE = tf.losses.absolute_difference(self.rating, self.reconstructed_rating, self.test_weight)
+        valid_weight = tf.not_equal(self.valid_rating, tf.constant(0, dtype=tf.float32))
+        test_weight = tf.not_equal(self.test_rating, tf.constant(0, dtype=tf.float32))
+        self.valid_RMSE = tf.sqrt(tf.losses.mean_squared_error(self.valid_rating, self.reconstructed_user, valid_weight))
+        self.test_RMSE = tf.sqrt(tf.losses.mean_squared_error(self.test_rating, self.reconstructed_user, test_weight))
 
         tf.summary.scalar("MSE", self.MSE)
         tf.summary.scalar("MAE", self.MAE)
         tf.summary.scalar("Loss", self.loss)
+        tf.summary.scalar("valid-RMSE", self.valid_RMSE)
+        tf.summary.scalar("test-RMSE", self.test_RMSE)
         tf.summary.scalar("Reg-Loss", self.regularized_loss)
 
         self.train_step = tf.train.AdamOptimizer(
@@ -148,133 +145,35 @@ class VAEMF(object):
         # add Saver ops
         self.saver = tf.train.Saver()
 
-    def construct_feeddict(self, user_idx, M):
-        feed_dict = {self.user: M[user_idx, :], self.rating: M[user_idx, :]}
-        return feed_dict
-
-    def construct_feeddict2(self, user_idx, M, W):
-        feed_dict = {self.user: M[user_idx, :], self.rating: M[user_idx, :], self.valid_weight:W}
-        return feed_dict
-
-    def construct_feeddict3(self, user_idx, M, W):
-        feed_dict = {self.user: M[user_idx, :], self.rating: M[user_idx, :], self.test_weight:W}
-        return feed_dict
-
     def train_test_validation(self, M, train_idx, test_idx, valid_idx, n_steps=100000, result_path='result/'):
         nonzero_user_idx = M.nonzero()[0]
         nonzero_item_idx = M.nonzero()[1]
 
-        train_size = train_idx.size
         trainM = np.zeros(M.shape)
-        trainM[nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]] = M[
-            nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]]
+        trainM[nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]] = M[nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]]
 
-        valid_weight_matrix = np.zeros(M.shape)
-        valid_weight_matrix[nonzero_user_idx[valid_idx], nonzero_item_idx[valid_idx]] = 1
-        test_weight_matrix = np.zeros(M.shape)
-        test_weight_matrix[nonzero_user_idx[test_idx], nonzero_item_idx[test_idx]] = 1
+        validM = np.zeros(M.shape)
+        validM[nonzero_user_idx[valid_idx], nonzero_item_idx[valid_idx]] = M[nonzero_user_idx[valid_idx], nonzero_item_idx[valid_idx]]
+
+        testM = np.zeros(M.shape)
+        testM[nonzero_user_idx[test_idx], nonzero_item_idx[test_idx]] = M[nonzero_user_idx[test_idx], nonzero_item_idx[test_idx]]
+
+        for i in range(self.num_user):
+            if np.sum(trainM[i]) == 0:
+                testM[i] = 0
+                validM[i] = 0
 
         train_writer = tf.summary.FileWriter(
             result_path + '/train', graph=self.sess.graph)
-        valid_writer = tf.summary.FileWriter(
-            result_path + '/validation', graph=self.sess.graph)
-        test_writer = tf.summary.FileWriter(
-            result_path + '/test', graph=self.sess.graph)
-
-        best_val_mse = np.inf
-        best_val_mae = np.inf
-        best_test_mse = 0
-        best_test_mae = 0
 
         self.sess.run(tf.global_variables_initializer())
 
         for step in range(1, n_steps):
-            batch_idx = np.random.randint(train_size, size=self.batch_size)
-            user_idx = nonzero_user_idx[train_idx[batch_idx]]
-            feed_dict = self.construct_feeddict(user_idx, trainM)
+            feed_dict = {self.user: trainM, self.valid_rating:validM, self.test_rating:testM}
 
-            _, mse, mae, summary_str = self.sess.run(
-                [self.train_step, self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
+            _, mse, mae, valid_rmse, test_rmse,  summary_str = self.sess.run(
+                [self.train_step, self.MSE, self.MAE, self.valid_RMSE, self.test_RMSE, self.summary_op], feed_dict=feed_dict)
             train_writer.add_summary(summary_str, step)
-
-            if step % int(n_steps / 10) == 0:
-                valid_user_idx = np.arange(self.num_user)
-                valid_feed_dict = self.construct_feeddict2(valid_user_idx, trainM, valid_weight_matrix)
-                mse_valid, mae_valid, summary_str = self.sess.run(
-                    [self.validMSE, self.validMAE, self.summary_op], feed_dict=valid_feed_dict)
-
-                valid_writer.add_summary(summary_str, step)
-
-                test_user_idx = np.arange(self.num_user)
-                test_feed_dict = self.construct_feeddict3(test_user_idx, trainM, test_weight_matrix)
-                mse_test, mae_test, summary_str = self.sess.run(
-                    [self.testMSE, self.testMAE, self.summary_op], feed_dict=test_feed_dict)
-
-                test_writer.add_summary(summary_str, step)
-
-                print("Step {0} | Train RMSE: {1:3.4f}, MAE: {2:3.4f}".format(
-                    step, np.sqrt(mse), mae))
-                print("         | Valid  RMSE: {0:3.4f}, MAE: {1:3.4f}".format(
-                    np.sqrt(mse_valid), mae_valid))
-                print("         | Test  RMSE: {0:3.4f}, MAE: {1:3.4f}".format(
-                    np.sqrt(mse_test), mae_test))
-
-                if best_val_mse > mse_valid:
-                    best_val_mse = mse_valid
-                    best_test_mse = mse_test
-
-                if best_val_mae > mae_valid:
-                    best_val_mae = mae_valid
-                    best_test_mae = mae_test
-
-        self.saver.save(self.sess, result_path + "/model.ckpt")
-        return best_test_mse, best_test_mae
-
-    def train(self, M, train_idx=None, test_idx=None, n_steps=100000, result_path='result/'):
-        nonzero_user_idx = M.nonzero()[0]
-        nonzero_item_idx = M.nonzero()[1]
-
-        if train_idx is None:
-            train_idx = np.arange(nonzero_user_idx.size)
-        train_size = train_idx.size
-        # construct training set
-        trainM = np.zeros(M.shape)
-        trainM[nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]] = M[
-            nonzero_user_idx[train_idx], nonzero_item_idx[train_idx]]
-
-        testM = M - trainM
-
-        train_writer = tf.summary.FileWriter(
-            result_path + '/train', graph=self.sess.graph)
-        test_writer = tf.summary.FileWriter(
-            result_path + '/test', graph=self.sess.graph)
-
-        self.sess.run(tf.global_variables_initializer())
-
-        for step in range(1, n_steps):
-            user_idx = np.random.randint(self.num_user, size=self.batch_size)
-            feed_dict = self.construct_feeddict(user_idx, trainM)
-
-            _, mse, mae, summary_str = self.sess.run(
-                [self.train_step, self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
-            train_writer.add_summary(summary_str, step)
-
-            if step % int(n_steps / 100) == 0:
-
-                if test_idx is not None:
-                    user_idx = np.unique(nonzero_user_idx)
-                    feed_dict = self.construct_feeddict(user_idx, testM)
-
-                    mse_test, mae_test, summary_str = self.sess.run(
-                        [self.MSE, self.MAE, self.summary_op], feed_dict=feed_dict)
-                    print("Step {0} | Train RMSE: {1:3.4f}, MAE: {2:3.4f}".format(
-                        step, np.sqrt(mse), mae))
-                    print("         | Test  RMSE: {0:3.4f}, MAE: {1:3.4f}".format(
-                        np.sqrt(mse_test), mae_test))
-
-                    test_writer.add_summary(summary_str, step)
-                else:
-                    print("Step {0} | Train RMSE: {1:3.4f}, MAE: {2:3.4f}".format(
-                        step, np.sqrt(mse), mae))
+            print("Iter {0} Train RMSE:{1}, Valid RMSE:{2}, Test RMSE:{3}".format(step, np.sqrt(mse), valid_rmse, test_rmse))
 
         self.saver.save(self.sess, result_path + "/model.ckpt")
