@@ -5,8 +5,10 @@ import tensorflow as tf
 
 
 def weight_variable(shape, name):
-    initial = tf.truncated_normal(shape, stddev=0.001)
-    return tf.Variable(initial, name=name)
+    #xavier initialisation
+    in_dim = shape[0]
+    xavier_stddev = 1. / tf.sqrt(in_dim / 2.)
+    return tf.Variable(tf.random_normal(shape=size, stddev=xavier_stddev), name=name)
 
 
 def bias_variable(shape, name):
